@@ -1548,7 +1548,7 @@ function openDayViewModal(dateStr) {
         list.innerHTML = evts.map(e => {
             const zone = getZone(e.zone);
             const displayColor = state.activeZone === 'all' ? zone.color : e.color;
-            return `<div class="list-event-row" onclick="closeModal('dayViewModal'); openEditEventModal('${e.id}')" style="margin-bottom: 8px;">
+            return `<div class="list-event-row" onclick="closeModal('dayViewModal', true); setTimeout(function(){openEditEventModal('${e.id}')}, 10);" style="margin-bottom: 8px;">
                 <div class="event-divider" style="background:${displayColor}; width: 4px; height: auto; border-radius: 4px;"></div>
                 <div class="event-body" style="padding: 4px 0;">
                     <div class="name" style="${e.done?'text-decoration:line-through;color:var(--text-dim)':''}">${getTypeEmoji(e.type)} ${e.name}</div>
@@ -1561,8 +1561,8 @@ function openDayViewModal(dateStr) {
     openModal('dayViewModal');
 }
 function openEventModalFromDayView() {
-    closeModal('dayViewModal');
-    openEventModal(currentDayViewDate);
+    closeModal('dayViewModal', true);
+    setTimeout(function(){ openEventModal(currentDayViewDate); }, 10);
 }
 
 // ─── Event Modal ─────────────────────────────────────
@@ -1650,7 +1650,7 @@ function renderZoneManageList(){
         return `<div class="zone-manage-row">
             <div class="zone-manage-dot" style="background:${z.color}"></div>
             <div class="zone-manage-name">${z.name}<span style="font-size:0.75rem;color:var(--text-dim)">${sl}</span></div>
-            <button class="zone-manage-btn" onclick="closeModal('zoneManageModal', true); openZoneEditModal('${z.id}');">✏ 수정</button>
+            <button class="zone-manage-btn" onclick="closeModal('zoneManageModal', true); setTimeout(function(){openZoneEditModal('${z.id}')}, 10);">✏ 수정</button>
             <button class="zone-manage-btn del" onclick="deleteZone('${z.id}')">✕ 삭제</button>
         </div>`;
     }).join('');
