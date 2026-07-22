@@ -945,12 +945,46 @@ function today() { return ymd(new Date()); }
 function daysUntil(ds) { return Math.ceil((new Date(ds) - new Date(today())) / 86400000); }
 function daysSince(ds)  { if (!ds) return null; return Math.floor((new Date(today()) - new Date(ds)) / 86400000) + 1; }
 function eventsForZone(zoneId) { return zoneId === 'all' ? state.events : state.events.filter(e => e.zone === zoneId); }
+function getDatesInRange(startStr, endStr) {
+    if (!endStr || startStr >= endStr) return [startStr];
+    let [sy, sm, sd] = startStr.split('-').map(Number);
+    let [ey, em, ed] = endStr.split('-').map(Number);
+    let curr = new Date(sy, sm-1, sd);
+    let end = new Date(ey, em-1, ed);
+    let dates = [];
+    while (curr <= end) {
+        dates.push(`${curr.getFullYear()}-${pad(curr.getMonth()+1)}-${pad(curr.getDate())}`);
+        curr.setDate(curr.getDate() + 1);
+    }
+    return dates;
+}
+function buildEvtMap(events, activeZone) {
+    const map = {};
+    events.forEach(e => {
+        if (activeZone !== 'all' && e.zone !== activeZone) return;
+        const dates = getDatesInRange(e.date, e.endDate);
+        dates.forEach((dStr, i) => {
+            let pos = 'single';
+            if (dates.length > 1) {
+                if (i === 0) pos = 'start';
+                else if (i === dates.length - 1) pos = 'end';
+                else pos = 'middle';
+            }
+            (map[dStr] = map[dStr]||[]).push({...e, _pos: pos});
+        });
+    });
+    return map;
+}
 function eventsForMonth(y, m)  {
+    const evtMap = buildEvtMap(state.events, state.activeZone);
     const prefix = `${y}-${pad(m+1)}`;
-    return state.events.filter(e =>
-        e.date.startsWith(prefix) &&
-        (state.activeZone === 'all' || e.zone === state.activeZone)
-    );
+    const uniqueEvents = new Map();
+    for (const [dateStr, evts] of Object.entries(evtMap)) {
+        if (dateStr.startsWith(prefix)) {
+            evts.forEach(e => { uniqueEvents.set(e.id, e); });
+        }
+    }
+    return Array.from(uniqueEvents.values());
 }
 function getZone(id) { return state.zones.find(z => z.id === id) || { name:id, color:'#888', stage:-1, stageDate:'', memo:'' }; }
 function getTypeEmoji(t) { return {'회의':'🏛️','서류':'📄','현장':'🏗️','법정기한':'⏰','기타':'📌'}[t]||'📌'; }
@@ -1433,9 +1467,7 @@ function renderCalendar() {
     const daysInMonth = new Date(y, m+1, 0).getDate();
     const prevDays = new Date(y, m, 0).getDate();
     const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
-    const evts = eventsForMonth(y, m);
-    const evtMap = {};
-    evts.forEach(e => { (evtMap[e.date] = evtMap[e.date]||[]).push(e); });
+    const evtMap = buildEvtMap(state.events, state.activeZone);
 
     for (let i = 0; i < totalCells; i++) {
         let dayNum, dateStr, isOther = false;
@@ -1468,6 +1500,7 @@ function renderCalendar() {
         const todayBadge=dateStr===todayStr?`<span class="today-badge">TODAY</span>`:'';
         cell.innerHTML=`<div class="cal-day-num"><span class="day-num-text">${dayNum}</span>${todayBadge}</div>`;
         const dayEvts=evtMap[dateStr]||[];
+        dayEvts.sort((a,b) => a.id.localeCompare(b.id));
 
         if (dayEvts.length > 0) {
             const dotsContainer = document.createElement('div');
@@ -1486,8 +1519,24 @@ function renderCalendar() {
             const shortZone = zone.name !== '전체' ? `[${zone.name.replace(/구역$/, '')}] ` : '';
             const displayColor = state.activeZone === 'all' ? zone.color : e.color;
             const chip=document.createElement('span'); chip.className='cal-event';
-            chip.style.cssText=`background:${displayColor}22;color:${displayColor};border:1px solid ${displayColor}44;text-decoration:${e.done?'line-through':'none'}`;
-            chip.textContent=`${shortZone}${getTypeEmoji(e.type)} ${e.name}`; chip.title=`${zone.name} - ${e.name}`;
+            let styleExt = '', contentHtml = '';
+            
+            if (e._pos === 'start') { 
+                contentHtml = `${shortZone}${getTypeEmoji(e.type)} ${e.name}`;
+                styleExt = 'border-top-right-radius:0; border-bottom-right-radius:0; margin-right:-4px; padding-right:8px; border-right:none; z-index:1; overflow:visible; white-space:nowrap;'; 
+            } else if (e._pos === 'end') { 
+                contentHtml = `<span style="font-size:0.7rem; opacity:0.8;">(종료)</span>`; 
+                styleExt = 'border-top-left-radius:0; border-bottom-left-radius:0; margin-left:-4px; padding-left:8px; border-left:none; z-index:1; text-align:right;'; 
+            } else if (e._pos === 'middle') { 
+                contentHtml = `&nbsp;`; 
+                styleExt = 'border-radius:0; margin-left:-4px; margin-right:-4px; border-left:none; border-right:none; z-index:1;'; 
+            } else {
+                contentHtml = `${shortZone}${getTypeEmoji(e.type)} ${e.name}`;
+            }
+
+            chip.style.cssText=`background:${displayColor}22;color:${displayColor};border:1px solid ${displayColor}44;text-decoration:${e.done?'line-through':'none'};${styleExt}`;
+            chip.innerHTML = contentHtml;
+            chip.title=`${zone.name} - ${e.name}`;
             chip.onclick=ev=>{ev.stopPropagation();openEditEventModal(e.id);}; cell.appendChild(chip);
         });
         if(dayEvts.length>3){
