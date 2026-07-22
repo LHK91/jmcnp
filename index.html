@@ -419,6 +419,7 @@
             .event-actions { width: 100%; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; }
         }
         @media (max-width:600px) { .stats-bar { grid-template-columns:1fr 1fr; } .form-grid2 { grid-template-columns:1fr; } .zone-header-top { flex-direction:column; } }
+        @media (max-width:768px) { .pc-only { display: none !important; } }
     </style>
 </head>
 <body>
@@ -458,20 +459,27 @@
             <!-- 데이터 내보내기 (로컬 백업용) -->
             <input type="file" id="importFileInput" accept=".json" onchange="importData(event)">
 
-            <!-- Excel Export Dropdown -->
             <div class="export-wrap" id="exportWrap">
                 <button class="btn-export" id="btnExport" onclick="toggleExportMenu()">
                     📊 내보내기 ▾
                 </button>
                 <div class="export-menu" id="exportMenu">
-                    <button class="export-menu-item" onclick="exportExcel('all')">
-                        <span class="ex-icon">📋</span>
-                        <div><div style="font-weight:700">전체 구역 내보내기</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">모든 구역 + 구역별 시트 (.xlsx)</div></div>
+                    <button class="export-menu-item" onclick="exportData()">
+                        <span class="ex-icon">💾</span>
+                        <div><div style="font-weight:700;color:var(--accent-green);">데이터 백업 (JSON)</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">모든 데이터 로컬 저장</div></div>
+                    </button>
+                    <button class="export-menu-item" onclick="document.getElementById('importFileInput').click()">
+                        <span class="ex-icon">📂</span>
+                        <div><div style="font-weight:700;color:var(--accent-orange);">데이터 복원 (JSON)</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">기존 백업본 불러오기</div></div>
                     </button>
                     <div class="export-menu-divider"></div>
+                    <button class="export-menu-item" onclick="exportExcel('all')">
+                        <span class="ex-icon">📋</span>
+                        <div><div style="font-weight:700">전체 구역 엑셀</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">모든 구역 시트 (.xlsx)</div></div>
+                    </button>
                     <button class="export-menu-item" id="exportZoneItem" onclick="exportCurrentZone()">
                         <span class="ex-icon">📍</span>
-                        <div><div style="font-weight:700">현재 구역 내보내기</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px" id="exportZoneLabel">구역을 먼저 선택하세요</div></div>
+                        <div><div style="font-weight:700">현재 구역 엑셀</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px" id="exportZoneLabel">구역을 먼저 선택하세요</div></div>
                     </button>
                 </div>
             </div>
@@ -535,7 +543,7 @@
         <aside class="sidebar">
             <div class="sidebar-card" style="animation-delay:0.1s">
                 <div class="sidebar-card-title">
-                    <span>🏗️ 사업구역 필터</span>
+                    <span>🏗️ 사업별 현황</span>
                     <button class="btn-manage-zones" onclick="openZoneManageModal()">⚙ 구역 관리</button>
                 </div>
                 <div class="zone-list" id="zoneList"></div>
@@ -579,6 +587,10 @@
                     <div class="cal-grid" id="calGrid"></div>
                 </div>
                 <div id="listView"><div id="listContent"></div></div>
+                <div id="allDoneEventsSection" class="pc-only" style="margin-top: 20px; background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: 20px; padding: 20px; display: none;">
+                    <h3 style="margin:0 0 15px 0; color:var(--text-main); font-size:1.1rem; display:flex; align-items:center; gap:8px;">✅ <span style="font-weight:700;">전체 완료된 일정</span></h3>
+                    <div id="allDoneEventsList"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -940,8 +952,7 @@ function renderStats() {
     document.getElementById('popDone').innerHTML = htmlDone || '<div style="color:var(--text-dim);text-align:center;">완료된 일정이 없습니다</div>';
 
     // 4. 관리 사업구역 수
-    const zoneIds = new Set(state.events.map(e => e.zone));
-    const activeZones = state.zones.filter(z => z.id !== 'all' && zoneIds.has(z.id));
+    const activeZones = state.zones.filter(z => z.id !== 'all');
     document.getElementById('statZones').textContent = activeZones.length;
     let htmlZones = activeZones.map(z => `<div>📍 ${z.name}</div>`).join('');
     document.getElementById('popZones').innerHTML = htmlZones || '<div style="color:var(--text-dim);text-align:center;">관리 중인 구역이 없습니다</div>';
@@ -1492,7 +1503,7 @@ function renderList() {
 function switchView(v){
     state.currentView=v;
     document.getElementById('calendarView').style.display=v==='cal'?'':'none';
-    document.getElementById('listView').style.display=v==='list'?'':'none';
+    document.getElementById('listView').style.display=v==='list'?'block':'none';
     document.getElementById('btnCalView').className=v==='cal'?'active':'';
     document.getElementById('btnListView').className=v==='list'?'active':'';
     renderAll();
@@ -1731,6 +1742,27 @@ function openProcDetailModal(zoneId, stepIdx) {
     openModal('procDetailModal');
 }
 
+function syncProcEvent(zoneId, stepIdx, date, memo) {
+    const eventId = `proc_${zoneId}_${stepIdx}`;
+    if (!date) {
+        state.events = state.events.filter(e => e.id !== eventId);
+        return;
+    }
+    const p = PROCEDURES[stepIdx];
+    const eventName = `[단계목표] ${p.short}`;
+    const zone = getZone(zoneId);
+    const existingIdx = state.events.findIndex(e => e.id === eventId);
+    if (existingIdx > -1) {
+        state.events[existingIdx].date = date;
+        state.events[existingIdx].note = memo;
+    } else {
+        state.events.push({
+            id: eventId, name: eventName, date: date, endDate: '', zone: zoneId,
+            type: '법정기한', color: zone.color, note: memo, done: false
+        });
+    }
+}
+
 function saveProcDetail() {
     const zoneId = document.getElementById('pdZoneId').value;
     const stepIdx = document.getElementById('pdStepIdx').value;
@@ -1741,8 +1773,10 @@ function saveProcDetail() {
     if(zoneIdx > -1) {
         if(!state.zones[zoneIdx].stepDetails) state.zones[zoneIdx].stepDetails = {};
         state.zones[zoneIdx].stepDetails[stepIdx] = { date, memo };
+        syncProcEvent(zoneId, stepIdx, date, memo);
         save();
         renderZoneHeader();
+        renderAll();
     }
     closeModal('procDetailModal');
 }
@@ -1754,8 +1788,10 @@ function deleteProcDetail() {
     if(zoneIdx > -1 && state.zones[zoneIdx].stepDetails) {
         if(confirm('이 단계의 기록을 삭제하시겠습니까?')) {
             delete state.zones[zoneIdx].stepDetails[stepIdx];
+            syncProcEvent(zoneId, stepIdx, null, null);
             save();
             renderZoneHeader();
+            renderAll();
             closeModal('procDetailModal');
         }
     }
@@ -1772,10 +1808,13 @@ function setAsCurrentStageFromDetail() {
         state.zones[zoneIdx].stageDate = date;
         
         if(!state.zones[zoneIdx].stepDetails) state.zones[zoneIdx].stepDetails = {};
-        state.zones[zoneIdx].stepDetails[stepIdx] = { date: document.getElementById('pdDate').value, memo: document.getElementById('pdMemo').value.trim() };
+        const memo = document.getElementById('pdMemo').value.trim();
+        state.zones[zoneIdx].stepDetails[stepIdx] = { date, memo };
+        syncProcEvent(zoneId, stepIdx, date, memo);
         
         save();
         renderZoneHeader();
+        renderAll();
     }
     closeModal('procDetailModal');
 }
@@ -1787,9 +1826,35 @@ function updateDateDisplay(){
 }
 
 // ─── Render All ──────────────────────────────────────
+function renderAllDoneEvents() {
+    const list = document.getElementById('allDoneEventsList');
+    const section = document.getElementById('allDoneEventsSection');
+    if(!list || !section) return;
+    const allDone = state.events.filter(e => e.done && (state.activeZone === 'all' || e.zone === state.activeZone)).sort((a,b) => b.date.localeCompare(a.date));
+    if (allDone.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    
+    list.innerHTML = allDone.map(e => {
+        const zone = getZone(e.zone);
+        const displayColor = state.activeZone === 'all' ? zone.color : e.color;
+        const shortZone = zone.name !== '전체' ? `[${zone.name.replace(/구역$/, '')}] ` : '';
+        return `<div class="list-event-row" style="margin-bottom:8px; opacity:0.8; cursor:pointer;" onclick="openEditEventModal('${e.id}')">
+            <div class="event-divider" style="background:${displayColor}; width:4px; height:auto; border-radius:4px;"></div>
+            <div class="event-body" style="padding:4px 0; display:flex; align-items:center; gap:10px;">
+                <div style="color:var(--text-dim); font-size:0.85rem; min-width:80px;">${e.date}</div>
+                <div class="name" style="text-decoration:line-through; color:var(--text-dim); margin-bottom:0;">${getTypeEmoji(e.type)} ${shortZone}${e.name}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 function renderAll(){
     renderStats();renderZoneList();renderZoneHeader();renderMiniCal();renderUpcoming();
     if(state.currentView==='cal')renderCalendar();else renderList();
+    renderAllDoneEvents();
 }
 
 // ═══════════════════════════════════════════════════
