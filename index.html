@@ -588,7 +588,7 @@
                 </div>
                 <div id="listView"><div id="listContent"></div></div>
                 <div id="allDoneEventsSection" class="pc-only" style="margin-top: 20px; background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: 20px; padding: 20px; display: none;">
-                    <h3 style="margin:0 0 15px 0; color:var(--text-main); font-size:1.1rem; display:flex; align-items:center; gap:8px;">✅ <span style="font-weight:700;">전체 완료된 일정</span></h3>
+                    <h3 style="margin:0 0 15px 0; color:var(--text-main); font-size:1.1rem; display:flex; align-items:center; gap:8px;">✅ <span style="font-weight:700;">해당 월 완료된 일정</span></h3>
                     <div id="allDoneEventsList"></div>
                 </div>
             </div>
@@ -1830,7 +1830,10 @@ function renderAllDoneEvents() {
     const list = document.getElementById('allDoneEventsList');
     const section = document.getElementById('allDoneEventsSection');
     if(!list || !section) return;
-    const allDone = state.events.filter(e => e.done && (state.activeZone === 'all' || e.zone === state.activeZone)).sort((a,b) => b.date.localeCompare(a.date));
+    const y = state.currentYear;
+    const m = state.currentMonth;
+    const prefix = `${y}-${pad(m+1)}`;
+    const allDone = state.events.filter(e => e.done && e.date.startsWith(prefix) && (state.activeZone === 'all' || e.zone === state.activeZone)).sort((a,b) => b.date.localeCompare(a.date));
     if (allDone.length === 0) {
         section.style.display = 'none';
         return;
