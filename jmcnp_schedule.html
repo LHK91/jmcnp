@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JMCNP - 사업구역별 월간 일정표</title>
+    <meta name="description" content="JMCNP 정비사업전문관리업체의 사업구역별 월간 공유 일정표입니다.">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <!-- Firebase SDK (Realtime Database) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <style>
+        /* ── Auth Overlay ── */
+        #authOverlay {
+            position:fixed; inset:0; z-index:99999;
+            background: radial-gradient(ellipse at 50% 0%, #151629 0%, #07080e 70%);
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            transition: opacity 0.5s ease;
+        }
+        .auth-box {
+            background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1);
+            backdrop-filter:blur(30px); border-radius:28px;
+            padding:48px 52px; text-align:center; max-width:420px; width:90%;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+            animation: modalIn 0.6s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .auth-logo {
+            width:72px; height:72px; border-radius:20px; margin:0 auto 24px;
+            background:linear-gradient(135deg,#00d2ff,#9d50bb);
+            display:flex; align-items:center; justify-content:center;
+            font-size:2rem; font-weight:900; box-shadow:0 0 40px rgba(0,210,255,0.35);
+        }
+        .auth-title { font-size:1.8rem; font-weight:900; letter-spacing:-1px; margin-bottom:6px;
+            background:linear-gradient(90deg,#00d2ff,#9d50bb); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .auth-sub { font-size:0.88rem; color:rgba(255,255,255,0.45); margin-bottom:32px; }
+        .auth-input-wrap { position:relative; margin-bottom:14px; }
+        .auth-input {
+            width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+            color:#fff; padding:16px 20px; border-radius:14px; font-family:inherit;
+            font-size:1.1rem; letter-spacing:0.25em; text-align:center;
+            outline:none; transition:border-color 0.2s;
+        }
+        .auth-input:focus { border-color:rgba(0,210,255,0.5); }
+        .auth-input.shake {
+            animation: shake 0.4s ease;
+            border-color: rgba(255,71,87,0.6) !important;
+        }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+        .auth-error { font-size:0.82rem; color:#ff4757; margin-bottom:12px; min-height:20px; }
+        .auth-btn {
+            width:100%; background:linear-gradient(135deg,#00d2ff,#9d50bb); border:none;
+            color:white; padding:16px; border-radius:14px; font-family:inherit;
+            font-size:1rem; font-weight:800; cursor:pointer; transition:all 0.3s;
+            box-shadow:0 4px 20px rgba(0,210,255,0.25); letter-spacing:0.02em;
+        }
+        .auth-btn:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,210,255,0.4); }
+        .auth-hint { font-size:0.75rem; color:rgba(255,255,255,0.2); margin-top:20px; }
+        /* ── Sync Status ── */
+        .sync-badge {
+            display:flex; align-items:center; gap:7px;
+            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1);
+            padding:7px 14px; border-radius:50px; font-size:0.78rem; font-weight:600;
+            transition:all 0.4s;
+        }
+        .sync-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; transition:background 0.4s; }
+        .sync-dot.synced  { background:var(--accent-green); box-shadow:0 0 8px var(--accent-green); animation:pulse 3s infinite; }
+        .sync-dot.saving  { background:var(--accent-orange); box-shadow:0 0 8px var(--accent-orange); animation:pulse 1s infinite; }
+        .sync-dot.error   { background:var(--accent-red); }
+        .sync-dot.local   { background:rgba(255,255,255,0.3); }
+        .sync-dot.connecting { background:var(--accent-blue); animation:pulse 1s infinite; }
+        /* ── Data Sync Bar ── */
+        .sync-bar {
+            display:flex; align-items:center; gap:10px; justify-content:flex-end;
+            padding:10px 0 4px; margin-bottom:12px; flex-wrap:wrap;
+        }
+        .btn-sync {
+            display:flex; align-items:center; gap:6px;
+            background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+            color:rgba(255,255,255,0.6); padding:7px 14px; border-radius:10px;
+            font-family:inherit; font-size:0.8rem; font-weight:600; cursor:pointer; transition:all 0.2s;
+        }
+        .btn-sync:hover { background:rgba(255,255,255,0.12); color:#fff; }
+        .btn-sync.import { border-color:rgba(46,213,115,0.3); color:#2ed573; background:rgba(46,213,115,0.06); }
+        .btn-sync.import:hover { background:rgba(46,213,115,0.15); }
+        .sync-divider { width:1px; height:20px; background:rgba(255,255,255,0.1); }
+        .sync-note { font-size:0.72rem; color:rgba(255,255,255,0.25); }
+        #importFileInput { display:none; }
+
+        :root {
+            --bg-dark: #07080e;
+            --bg-card: rgba(255,255,255,0.05);
+            --accent-blue: #00d2ff;
+            --accent-purple: #9d50bb;
+            --accent-green: #2ed573;
+            --accent-orange: #ffa502;
+            --accent-red: #ff4757;
+            --text-main: #ffffff;
+            --text-dim: rgba(255,255,255,0.55);
+            --glass-border: rgba(255,255,255,0.08);
+            --glass-border-hover: rgba(255,255,255,0.2);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: radial-gradient(ellipse at 20% 0%, #151629 0%, #07080e 60%),
+                        radial-gradient(ellipse at 80% 100%, #0d1a2a 0%, transparent 60%);
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Outfit','Noto Sans KR',sans-serif;
+            min-height: 100vh; overflow-x: hidden;
+        }
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+        ::-webkit-scrollbar-thumb { background: rgba(0,210,255,0.4); border-radius:10px; }
+
+        .container { max-width:1440px; margin:0 auto; padding:32px 24px; }
+
+        /* ── Header ── */
+        header { display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; animation:fadeInDown 0.7s ease-out; }
+        .logo-section { display:flex; align-items:center; gap:18px; }
+        .logo-icon { width:52px; height:52px; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; font-weight:900; box-shadow:0 0 30px rgba(0,210,255,0.3); }
+        .logo-text h1 { font-size:2rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .logo-text p { color:var(--text-dim); font-size:0.85rem; margin-top:2px; }
+        .header-right { display:flex; align-items:center; gap:12px; }
+        .live-badge { display:flex; align-items:center; gap:8px; background:rgba(0,210,255,0.07); border:1px solid rgba(0,210,255,0.3); color:var(--accent-blue); padding:8px 18px; border-radius:50px; font-size:0.82rem; font-weight:600; }
+        .live-dot { width:8px; height:8px; background:var(--accent-blue); border-radius:50%; box-shadow:0 0 8px var(--accent-blue); animation:pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.6);opacity:0.5} }
+        .btn-add-main { display:flex; align-items:center; gap:8px; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); color:white; border:none; padding:10px 22px; border-radius:12px; font-size:0.9rem; font-weight:700; cursor:pointer; font-family:inherit; transition:all 0.3s; box-shadow:0 4px 20px rgba(0,210,255,0.2); }
+        .btn-add-main:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,210,255,0.35); }
+
+        /* ── Export Dropdown ── */
+        .export-wrap { position:relative; }
+        .btn-export { display:flex; align-items:center; gap:8px; background:rgba(46,213,115,0.1); border:1px solid rgba(46,213,115,0.35); color:var(--accent-green); padding:10px 18px; border-radius:12px; font-size:0.88rem; font-weight:700; cursor:pointer; font-family:inherit; transition:all 0.3s; white-space:nowrap; }
+        .btn-export:hover { background:rgba(46,213,115,0.2); transform:translateY(-1px); }
+        .export-menu { position:absolute; top:calc(100% + 8px); right:0; background:#151825; border:1px solid var(--glass-border); border-radius:14px; padding:8px; min-width:230px; z-index:500; box-shadow:0 20px 60px rgba(0,0,0,0.5); display:none; animation:fadeIn 0.2s ease; }
+        .export-menu.open { display:block; }
+        .export-menu-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; cursor:pointer; font-size:0.88rem; font-weight:600; transition:background 0.2s; width:100%; background:none; border:none; color:var(--text-main); font-family:inherit; text-align:left; }
+        .export-menu-item:hover { background:rgba(255,255,255,0.06); }
+        .export-menu-item.disabled { opacity:0.35; cursor:not-allowed; }
+        .export-menu-item .ex-icon { font-size:1.1rem; }
+        .export-menu-divider { height:1px; background:var(--glass-border); margin:6px 0; }
+
+        /* ── Stats Bar ── */
+        .stats-bar { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; position:relative; z-index:100; }
+        .stat-card { background:var(--bg-card); border:1px solid var(--glass-border); backdrop-filter:blur(20px); border-radius:20px; padding:20px; display:flex; align-items:center; gap:16px; animation:fadeInLeft 0.5s ease-out both; position:relative; cursor:pointer; z-index:101; }
+        
+        .stat-popover {
+            display: none; position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%);
+            background: #151825; border: 1px solid var(--glass-border); padding: 12px;
+            border-radius: 12px; z-index: 2000; min-width: 220px; width: max-content; max-width: 300px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6); font-size: 0.82rem; text-align: left;
+            max-height: 250px; overflow-y: auto; color: var(--text-main); font-weight: 500; line-height: 1.6;
+            cursor: default;
+        }
+        .stat-popover::before {
+            content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%) rotate(45deg);
+            width: 10px; height: 10px; background: #151825; border-left: 1px solid var(--glass-border); border-top: 1px solid var(--glass-border);
+        }
+        .stat-popover div { border-bottom: 1px solid rgba(255,255,255,0.05); padding: 6px 0; }
+        .stat-popover div:last-child { border-bottom: none; }
+        .stat-card:hover { z-index: 105; }
+        .stat-card:active { z-index: 105; }
+        .stat-card:hover .stat-popover, .stat-card:active .stat-popover { display: block; animation: fadeIn 0.2s ease-out; }
+
+        .stat-icon { width:48px; height:48px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.4rem; flex-shrink:0; }
+        .stat-icon.blue { background:rgba(0,210,255,0.12); }
+        .stat-icon.green { background:rgba(46,213,115,0.12); }
+        .stat-icon.orange { background:rgba(255,165,2,0.12); }
+        .stat-icon.red { background:rgba(255,71,87,0.12); }
+        .stat-info .val { font-size:1.8rem; font-weight:800; line-height:1; }
+        .stat-info .lbl { font-size:0.78rem; color:var(--text-dim); margin-top:4px; }
+        .stat-info .val.blue { color:var(--accent-blue); }
+        .stat-info .val.green { color:var(--accent-green); }
+        .stat-info .val.orange { color:var(--accent-orange); }
+        .stat-info .val.red { color:var(--accent-red); }
+
+        /* ── Zone Header Panel ── */
+        #zoneHeaderPanel { display:none; margin-bottom:24px; background:var(--bg-card); border:1px solid var(--glass-border); backdrop-filter:blur(20px); border-radius:20px; padding:28px 32px; animation:fadeIn 0.5s ease-out; }
+        #zoneHeaderPanel.visible { display:block; }
+        .zone-header-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; gap:20px; }
+        .zone-header-info {}
+        .zone-header-label { font-size:0.75rem; font-weight:700; letter-spacing:0.12em; color:var(--text-dim); text-transform:uppercase; margin-bottom:8px; }
+        .zone-header-name { font-size:2.2rem; font-weight:900; letter-spacing:-1px; line-height:1; }
+        .zone-header-stage-badge { display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:6px 16px; border-radius:20px; font-size:0.82rem; font-weight:700; }
+        .zone-stage-days { flex-shrink:0; text-align:center; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:16px; padding:16px 24px; min-width:140px; }
+        .zone-stage-days .days-num { font-size:2.8rem; font-weight:900; line-height:1; }
+        .zone-stage-days .days-label { font-size:0.78rem; color:var(--text-dim); margin-top:4px; }
+        .zone-stage-days .stage-name { font-size:0.85rem; font-weight:700; margin-top:8px; }
+
+        /* Procedure Stepper */
+        .procedure-label { font-size:0.75rem; font-weight:700; letter-spacing:0.1em; color:var(--text-dim); text-transform:uppercase; margin-bottom:14px; }
+        .procedure-stepper { display:flex; align-items:flex-start; gap:0; overflow-x:auto; padding-bottom:8px; }
+        .procedure-stepper::-webkit-scrollbar { height:3px; }
+        .proc-step { display:flex; flex-direction:column; align-items:center; flex-shrink:0; position:relative; min-width:72px; cursor:pointer; transition:transform 0.2s; }
+        .proc-step:hover { transform:translateY(-3px); }
+        .proc-step-meta { font-size:0.6rem; color:var(--text-dim); margin-top:2px; text-align:center; }
+        .proc-step:not(:last-child)::after { content:''; position:absolute; top:18px; left:calc(50% + 18px); width:calc(100% - 36px); height:2px; background:rgba(255,255,255,0.08); z-index:0; }
+        .proc-step.past:not(:last-child)::after { background:rgba(255,255,255,0.25); }
+        .proc-circle { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:800; z-index:1; position:relative; transition:all 0.3s; border:2px solid transparent; }
+        .proc-step.past .proc-circle { background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.5); border-color:rgba(255,255,255,0.15); }
+        .proc-step.past .proc-circle::after { content:'✓'; font-size:0.85rem; }
+        .proc-step.past .proc-num { display:none; }
+        .proc-step.current .proc-circle { background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); color:white; box-shadow:0 0 20px rgba(0,210,255,0.5); animation:glowPulse 2.5s infinite; border-color:rgba(0,210,255,0.6); }
+        @keyframes glowPulse { 0%,100%{box-shadow:0 0 15px rgba(0,210,255,0.4)} 50%{box-shadow:0 0 30px rgba(0,210,255,0.8)} }
+        .proc-step.future .proc-circle { background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.2); border-color:rgba(255,255,255,0.06); }
+        .proc-step-name { font-size:0.65rem; font-weight:600; text-align:center; margin-top:8px; max-width:70px; line-height:1.3; word-break:keep-all; }
+        .proc-step.past .proc-step-name { color:rgba(255,255,255,0.4); }
+        .proc-step.current .proc-step-name { color:var(--accent-blue); font-weight:800; }
+        .proc-step.future .proc-step-name { color:rgba(255,255,255,0.18); }
+        .proc-step-dday { font-size:0.6rem; font-weight:700; color:var(--accent-blue); margin-top:3px; background:rgba(0,210,255,0.12); padding:1px 5px; border-radius:6px; }
+
+        .no-stage-notice { text-align:center; padding:20px; color:var(--text-dim); font-size:0.88rem; border:1px dashed rgba(255,255,255,0.15); border-radius:12px; width:100%; }
+        .no-stage-notice button { margin-top:10px; background:rgba(0,210,255,0.1); border:1px solid rgba(0,210,255,0.3); color:var(--accent-blue); padding:8px 20px; border-radius:10px; font-family:inherit; font-size:0.85rem; font-weight:700; cursor:pointer; transition:all 0.2s; }
+        .no-stage-notice button:hover { background:rgba(0,210,255,0.2); }
+
+        /* ── Zone Memo Section ── */
+        .zone-memo-section { margin-top:24px; border-top:1px solid rgba(255,255,255,0.07); padding-top:20px; }
+        .zone-memo-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .zone-memo-label { font-size:0.75rem; font-weight:700; letter-spacing:0.1em; color:var(--text-dim); text-transform:uppercase; }
+        .btn-memo-edit { background:rgba(255,255,255,0.07); border:1px solid var(--glass-border); color:var(--text-dim); padding:5px 14px; border-radius:8px; font-size:0.78rem; font-weight:700; cursor:pointer; font-family:inherit; transition:all 0.2s; }
+        .btn-memo-edit:hover { background:rgba(255,255,255,0.12); color:var(--text-main); }
+        .zone-memo-display { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:16px; min-height:60px; font-size:0.9rem; line-height:1.8; color:var(--text-dim); white-space:pre-wrap; word-break:break-all; }
+        .zone-memo-display.has-content { color:var(--text-main); }
+        .zone-memo-edit { display:none; flex-direction:column; gap:0; }
+        .zone-memo-edit textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(0,210,255,0.3); color:var(--text-main); padding:14px 16px; border-radius:12px; font-family:inherit; font-size:0.9rem; line-height:1.8; resize:vertical; min-height:100px; outline:none; }
+        .zone-memo-actions { display:flex; gap:8px; margin-top:10px; }
+        .btn-memo-save { background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); border:none; color:white; padding:8px 20px; border-radius:10px; font-family:inherit; font-size:0.85rem; font-weight:700; cursor:pointer; transition:all 0.2s; }
+        .btn-memo-save:hover { opacity:0.9; }
+        .btn-memo-cancel { background:rgba(255,255,255,0.07); border:1px solid var(--glass-border); color:var(--text-dim); padding:8px 16px; border-radius:10px; font-family:inherit; font-size:0.85rem; cursor:pointer; transition:all 0.2s; }
+        .btn-memo-cancel:hover { background:rgba(255,255,255,0.12); }
+
+        /* ── Main Layout ── */
+        .main-layout { display:grid; grid-template-columns:300px 1fr; gap:24px; }
+        .sidebar { display:flex; flex-direction:column; gap:20px; }
+        .sidebar-card { background:var(--bg-card); border:1px solid var(--glass-border); backdrop-filter:blur(20px); border-radius:20px; padding:24px; animation:fadeInLeft 0.7s ease-out both; }
+        .sidebar-card-title { font-size:0.78rem; font-weight:700; letter-spacing:0.1em; color:var(--text-dim); text-transform:uppercase; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; }
+        .btn-manage-zones { background:rgba(0,210,255,0.1); border:1px solid rgba(0,210,255,0.25); color:var(--accent-blue); padding:4px 10px; border-radius:8px; font-size:0.72rem; font-weight:700; cursor:pointer; font-family:inherit; transition:all 0.2s; }
+        .btn-manage-zones:hover { background:rgba(0,210,255,0.2); }
+
+        .zone-list { display:flex; flex-direction:column; gap:6px; }
+        .zone-btn { display:flex; align-items:center; gap:12px; background:none; border:1px solid transparent; color:var(--text-dim); padding:10px 14px; border-radius:12px; cursor:pointer; font-family:inherit; font-size:0.9rem; font-weight:500; transition:all 0.25s; text-align:left; width:100%; }
+        .zone-btn:hover { background:rgba(255,255,255,0.05); color:var(--text-main); }
+        .zone-btn.active { background:rgba(0,210,255,0.1); color:var(--accent-blue); border-color:rgba(0,210,255,0.25); }
+        .zone-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .zone-count { margin-left:auto; font-size:0.75rem; font-weight:700; background:rgba(255,255,255,0.08); padding:2px 8px; border-radius:20px; }
+
+        /* Mini Cal */
+        .mini-cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .mini-cal-nav button { background:rgba(255,255,255,0.07); border:none; color:var(--text-main); width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:1rem; transition:background 0.2s; }
+        .mini-cal-nav button:hover { background:rgba(255,255,255,0.15); }
+        .mini-cal-title { font-weight:700; font-size:1rem; }
+        .mini-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+        .mini-cal-dow { text-align:center; font-size:0.68rem; font-weight:700; color:var(--text-dim); padding:4px 0; }
+        .mini-cal-day { text-align:center; font-size:0.8rem; padding:5px 2px; border-radius:8px; cursor:pointer; transition:all 0.2s; position:relative; }
+        .mini-cal-day:hover { background:rgba(255,255,255,0.08); }
+        .mini-cal-day.today { background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); color:white; font-weight:700; }
+        .mini-cal-day.has-event::after { content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; background:var(--accent-orange); border-radius:50%; }
+        .mini-cal-day.other-month { color:rgba(255,255,255,0.2); }
+        .mini-cal-day.sunday { color:var(--accent-red); }
+        .mini-cal-day.saturday { color:#7ec8e3; }
+
+        /* Upcoming */
+        .upcoming-list { display:flex; flex-direction:column; }
+        .upcoming-item { display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; }
+        .upcoming-item:last-child { border-bottom:none; }
+        .upcoming-dday { flex-shrink:0; width:44px; height:44px; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; }
+        .upcoming-dday .d { font-size:1rem; font-weight:800; }
+        .upcoming-info .title { font-size:0.88rem; font-weight:600; line-height:1.3; }
+        .upcoming-info .meta { font-size:0.75rem; color:var(--text-dim); margin-top:3px; }
+
+        /* ── Content ── */
+        .content-area { display:flex; flex-direction:column; gap:24px; }
+        .content-card { background:var(--bg-card); border:1px solid var(--glass-border); backdrop-filter:blur(20px); border-radius:20px; padding:28px; animation:fadeIn 0.7s ease-out both; }
+        .month-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+        .month-nav h2 { font-size:1.6rem; font-weight:800; }
+        .month-nav-controls { display:flex; gap:12px; align-items:center; }
+        .month-nav-btns { display:flex; align-items:center; gap:10px; }
+        .month-nav-btns button { background:rgba(255,255,255,0.07); border:1px solid var(--glass-border); color:var(--text-main); padding:8px 16px; border-radius:10px; cursor:pointer; font-family:inherit; font-size:0.85rem; transition:all 0.2s; }
+        .month-nav-btns button:hover { background:rgba(255,255,255,0.15); }
+        .month-nav-btns .today-btn { background:rgba(0,210,255,0.1); border-color:rgba(0,210,255,0.3); color:var(--accent-blue); font-weight:700; }
+        .view-toggle { display:flex; background:rgba(255,255,255,0.05); border-radius:10px; padding:3px; }
+        .view-toggle button { border:none; background:none; color:var(--text-dim); padding:6px 14px; border-radius:8px; cursor:pointer; font-family:inherit; font-size:0.82rem; font-weight:600; transition:all 0.2s; }
+        .view-toggle button.active { background:rgba(0,210,255,0.15); color:var(--accent-blue); }
+
+        /* Calendar */
+        #calendarView { width: 100%; }
+        .cal-header { display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:8px; }
+        .cal-dow { text-align:center; font-size:0.78rem; font-weight:700; color:var(--text-dim); padding:8px 0; letter-spacing:0.05em; }
+        .cal-dow:first-child { color:var(--accent-red); }
+        .cal-dow:last-child { color:#7ec8e3; }
+        .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+        .cal-cell { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:14px; height:130px; padding:10px; transition:all 0.25s; position:relative; cursor:pointer; min-width:0; overflow-y:auto; overflow-x:hidden; }
+        .cal-cell::-webkit-scrollbar { width:4px; }
+        .cal-cell::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:4px; }
+        .cal-cell:hover { background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.12); }
+        .cal-cell.today-cell { border-color:rgba(0,210,255,0.4); background:rgba(0,210,255,0.05); }
+        .cal-cell.other-month-cell { opacity:0.3; }
+        .cal-cell.sunday-cell .cal-day-num { color:var(--accent-red); }
+        .cal-cell.saturday-cell .cal-day-num { color:#7ec8e3; }
+        .cal-day-num { font-size:0.85rem; font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
+        .today-badge { font-size:0.65rem; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); color:white; padding:2px 6px; border-radius:6px; font-weight:700; }
+        .cal-dots { display: none; gap: 4px; flex-wrap: wrap; margin-top: 4px; padding: 0 2px; }
+        .cal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
+        .cal-event { font-size:0.72rem; padding:3px 7px; border-radius:6px; margin-bottom:3px; font-weight:600; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+        .cal-event-more { display:block; cursor:pointer; }
+        .cal-event:hover { opacity:0.8; }
+
+        /* List View */
+        #listView { display:none; }
+        .list-group { margin-bottom:28px; }
+        .list-group-header { font-size:0.8rem; font-weight:700; color:var(--text-dim); padding:8px 0 12px; border-bottom:1px solid rgba(255,255,255,0.07); margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+        .list-event-row { display:flex; align-items:center; gap:16px; padding:14px 16px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; margin-bottom:8px; transition:all 0.25s; cursor:pointer; }
+        .list-event-row:hover { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.12); }
+        .event-date-badge { flex-shrink:0; width:48px; text-align:center; }
+        .event-date-badge .day { font-size:1.4rem; font-weight:800; line-height:1; }
+        .event-date-badge .weekday { font-size:0.7rem; color:var(--text-dim); }
+        .event-divider { width:3px; height:40px; border-radius:4px; flex-shrink:0; }
+        .event-body { flex:1; }
+        .event-body .name { font-size:0.95rem; font-weight:600; }
+        .event-body .detail { font-size:0.8rem; color:var(--text-dim); margin-top:3px; }
+        .event-tags { display:flex; gap:6px; flex-shrink:0; }
+        .event-tag { font-size:0.72rem; padding:3px 10px; border-radius:20px; font-weight:700; }
+        .event-actions { display:flex; gap:6px; }
+        .action-btn { background:rgba(255,255,255,0.07); border:none; color:var(--text-dim); width:28px; height:28px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.85rem; transition:all 0.2s; }
+        .action-btn:hover { background:rgba(255,255,255,0.15); color:var(--text-main); }
+        .action-btn.delete:hover { background:rgba(255,71,87,0.2); color:var(--accent-red); }
+
+        /* ── Modals ── */
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:1000; display:none; align-items:center; justify-content:center; }
+        .modal-overlay.open { display:flex; }
+        .modal-box { background:#111320; border:1px solid var(--glass-border); border-radius:24px; padding:36px; width:90%; max-width:580px; box-shadow:0 30px 80px rgba(0,0,0,0.6); animation:modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1); max-height:90vh; overflow-y:auto; }
+        @keyframes modalIn { from{opacity:0;transform:scale(0.9) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        .modal-title { font-size:1.4rem; font-weight:800; margin-bottom:24px; background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .form-row { margin-bottom:16px; }
+        .form-row label { display:block; font-size:0.82rem; font-weight:700; color:var(--text-dim); margin-bottom:8px; letter-spacing:0.05em; }
+        .form-row input, .form-row select, .form-row textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); color:var(--text-main); padding:12px 16px; border-radius:12px; font-family:inherit; font-size:0.92rem; outline:none; transition:border-color 0.2s; }
+        .form-row input:focus, .form-row textarea:focus { border-color:rgba(0,210,255,0.5); }
+        .form-row select { cursor:pointer; }
+        .form-row select option { background:#1a1b2e; }
+        .form-row textarea { resize:vertical; min-height:80px; }
+        .form-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+        .form-actions { display:flex; gap:12px; margin-top:8px; }
+        .btn-cancel { flex:1; background:rgba(255,255,255,0.07); border:1px solid var(--glass-border); color:var(--text-main); padding:14px; border-radius:12px; font-family:inherit; font-size:0.95rem; font-weight:700; cursor:pointer; transition:all 0.2s; }
+        .btn-cancel:hover { background:rgba(255,255,255,0.12); }
+        .btn-save { flex:2; background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple)); border:none; color:white; padding:14px; border-radius:12px; font-family:inherit; font-size:0.95rem; font-weight:800; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 20px rgba(0,210,255,0.25); }
+        .btn-save:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,210,255,0.4); }
+        .color-picker { display:flex; gap:8px; flex-wrap:wrap; }
+        .color-chip { width:28px; height:28px; border-radius:8px; cursor:pointer; border:2px solid transparent; transition:all 0.2s; }
+        .color-chip.selected { border-color:white; transform:scale(1.15); }
+
+        /* Zone Manage Modal */
+        .zone-manage-list { display:flex; flex-direction:column; gap:8px; margin-bottom:20px; max-height:300px; overflow-y:auto; }
+        .zone-manage-row { display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:12px; }
+        .zone-manage-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+        .zone-manage-name { flex:1; font-weight:600; font-size:0.92rem; }
+        .zone-manage-btn { background:rgba(255,255,255,0.08); border:none; color:var(--text-dim); padding:5px 12px; border-radius:8px; cursor:pointer; font-size:0.78rem; font-family:inherit; transition:all 0.2s; }
+        .zone-manage-btn:hover { background:rgba(255,255,255,0.15); color:var(--text-main); }
+        .zone-manage-btn.del:hover { background:rgba(255,71,87,0.2); color:var(--accent-red); }
+        .btn-add-zone { width:100%; background:rgba(0,210,255,0.08); border:1px dashed rgba(0,210,255,0.3); color:var(--accent-blue); padding:12px; border-radius:12px; font-family:inherit; font-size:0.9rem; font-weight:700; cursor:pointer; transition:all 0.2s; }
+        .btn-add-zone:hover { background:rgba(0,210,255,0.15); }
+
+        /* Empty / Animations */
+        .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+        .empty-state .icon { font-size:3rem; margin-bottom:12px; }
+        .empty-state p { font-size:0.95rem; }
+        @keyframes fadeInDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeInLeft { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+        /* Responsive */
+        @media (max-width:1100px) { .main-layout { grid-template-columns:260px 1fr; } }
+        @media (max-width:900px) { .main-layout { grid-template-columns:1fr; } .stats-bar { grid-template-columns:repeat(2,1fr); } .cal-event { display:none; } }
+        @media (max-width:768px) {
+            .main-layout { display: flex; flex-direction: column-reverse; gap: 16px; }
+            .sidebar-card:nth-child(2) { display: none; }
+            .stats-bar { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+            .stat-card { padding: 12px; gap: 10px; }
+            .stat-icon { width: 36px; height: 36px; font-size: 1.1rem; }
+            .stat-info .val { font-size: 1.3rem; }
+            .stat-info .lbl { font-size: 0.7rem; }
+            
+            header { flex-direction: column; align-items: stretch; gap: 16px; }
+            .header-right { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+            .live-badge, .btn-export, .btn-add-main { white-space: nowrap; flex: 1; text-align: center; justify-content: center; padding: 12px 8px; font-size: 0.85rem; }
+            .export-wrap { flex: 1; }
+            .export-menu { left: 0; right: 0; width: 100%; min-width: auto; }
+            
+            #calendarView { overflow-x: hidden; padding-bottom: 0; }
+            .cal-header, .cal-grid { min-width: 0; }
+            .cal-grid { gap: 2px; }
+            .cal-cell { height: 85px; padding: 4px; border-radius: 6px; }
+            .cal-day-num { font-size: 0.7rem; margin-bottom: 2px; align-items: flex-start; }
+            .today-badge { display: none !important; }
+            .cal-cell.today-cell .day-num-text {
+                display: flex; align-items: center; justify-content: center;
+                width: 20px; height: 20px;
+                background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+                color: white; border-radius: 50%; font-weight: 800; margin-top: -2px; margin-left: -2px;
+            }
+            .cal-dow { font-size: 0.65rem; padding: 4px 0; }
+            .cal-event, .cal-event-more { display: none !important; }
+            .cal-dots { display: flex !important; }
+            
+            .month-nav { flex-direction: column; align-items: stretch; gap: 12px; }
+            .month-nav h2 { font-size: 1.4rem; text-align: center; }
+            .month-nav-controls { flex-direction: column; width: 100%; gap: 8px; }
+            .view-toggle { width: 100%; display: flex; }
+            .view-toggle button { flex: 1; white-space: nowrap; text-align: center; padding: 10px; font-size: 0.9rem; }
+            .month-nav-btns { width: 100%; display: flex; justify-content: space-between; gap: 6px; }
+            .month-nav-btns button { flex: 1; white-space: nowrap; padding: 10px 4px; font-size: 0.85rem; text-align: center; }
+            
+            .form-grid2 { grid-template-columns: 1fr; }
+            .auth-box { padding: 24px 20px; }
+            .modal-box { padding: 20px; width: 95%; }
+            .sync-bar { justify-content: flex-start; }
+            
+            .list-event-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .event-divider { display: none; }
+            .event-actions { width: 100%; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; }
+        }
+        @media (max-width:600px) { .stats-bar { grid-template-columns:1fr 1fr; } .form-grid2 { grid-template-columns:1fr; } .zone-header-top { flex-direction:column; } }
+    </style>
+</head>
+<body>
+<!-- ══ 인증 화면 ══ -->
+<div id="authOverlay">
+    <div class="auth-box">
+        <div class="auth-logo">J</div>
+        <div class="auth-title">JMCNP</div>
+        <div class="auth-sub">정비사업전문관리업체 · 공유 일정표<br>접근하려면 비밀번호를 입력하세요</div>
+        <div class="auth-input-wrap">
+            <input class="auth-input" id="authInput" type="password" placeholder="● ● ● ● ● ●"
+                onkeydown="if(event.key==='Enter')submitAuth()" autocomplete="current-password">
+        </div>
+        <div class="auth-error" id="authError"></div>
+        <button class="auth-btn" onclick="submitAuth()">🔐 입장하기</button>
+        <div class="auth-hint">한 번 인증하면 이 브라우저에서는 다시 묻지 않습니다</div>
+    </div>
+</div>
+<div class="container">
+
+    <!-- Header -->
+    <header>
+        <div class="logo-section">
+            <div class="logo-icon">J</div>
+            <div class="logo-text">
+                <h1>JMCNP</h1>
+                <p>정비사업전문관리업체 · 사업구역별 공유 일정표</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="live-badge"><div class="live-dot"></div><span id="currentDateDisplay"></span></div>
+            <!-- 실시간 동기화 상태 -->
+            <div class="sync-badge" id="syncBadge">
+                <div class="sync-dot connecting" id="syncDot"></div>
+                <span id="syncText">연결 중...</span>
+            </div>
+            <!-- 데이터 내보내기 (로컬 백업용) -->
+            <input type="file" id="importFileInput" accept=".json" onchange="importData(event)">
+
+            <!-- Excel Export Dropdown -->
+            <div class="export-wrap" id="exportWrap">
+                <button class="btn-export" id="btnExport" onclick="toggleExportMenu()">
+                    📊 내보내기 ▾
+                </button>
+                <div class="export-menu" id="exportMenu">
+                    <button class="export-menu-item" onclick="exportExcel('all')">
+                        <span class="ex-icon">📋</span>
+                        <div><div style="font-weight:700">전체 구역 내보내기</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">모든 구역 + 구역별 시트 (.xlsx)</div></div>
+                    </button>
+                    <div class="export-menu-divider"></div>
+                    <button class="export-menu-item" id="exportZoneItem" onclick="exportCurrentZone()">
+                        <span class="ex-icon">📍</span>
+                        <div><div style="font-weight:700">현재 구역 내보내기</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px" id="exportZoneLabel">구역을 먼저 선택하세요</div></div>
+                    </button>
+                </div>
+            </div>
+
+            <button class="btn-add-main" onclick="openEventModal()">＋ 일정 추가</button>
+        </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-card" tabindex="0">
+            <div class="stat-icon blue">📋</div><div class="stat-info"><div class="val blue" id="statTotal">0</div><div class="lbl">이번 달 전체 일정</div></div>
+            <div class="stat-popover" id="popTotal"></div>
+        </div>
+        <div class="stat-card" tabindex="0">
+            <div class="stat-icon orange">⏰</div><div class="stat-info"><div class="val orange" id="statUrgent">0</div><div class="lbl">7일 이내 마감</div></div>
+            <div class="stat-popover" id="popUrgent"></div>
+        </div>
+        <div class="stat-card" tabindex="0">
+            <div class="stat-icon green">✅</div><div class="stat-info"><div class="val green" id="statDone">0</div><div class="lbl">완료된 일정</div></div>
+            <div class="stat-popover" id="popDone"></div>
+        </div>
+        <div class="stat-card" tabindex="0">
+            <div class="stat-icon red">🏗️</div><div class="stat-info"><div class="val red" id="statZones">0</div><div class="lbl">관리 사업구역 수</div></div>
+            <div class="stat-popover" id="popZones"></div>
+        </div>
+    </div>
+
+    <!-- Zone Header Panel -->
+    <div id="zoneHeaderPanel">
+        <div class="zone-header-top">
+            <div class="zone-header-info">
+                <div class="zone-header-label">🏗️ 선택된 사업구역</div>
+                <div class="zone-header-name" id="zoneHeaderName"></div>
+                <div class="zone-header-stage-badge" id="zoneHeaderStageBadge"></div>
+            </div>
+            <div class="zone-stage-days" id="zoneHeaderDays"></div>
+        </div>
+        <div class="procedure-label">📋 도시정비법 사업 추진 단계 (재개발·재건축)</div>
+        <div class="procedure-stepper" id="procedureStepper"></div>
+
+        <!-- Zone Memo Section (2번 기능) -->
+        <div class="zone-memo-section">
+            <div class="zone-memo-header">
+                <div class="zone-memo-label">📝 구역 메모 / 지시사항</div>
+                <button class="btn-memo-edit" id="btnMemoEdit" onclick="toggleMemoEdit()">✏ 편집</button>
+            </div>
+            <div class="zone-memo-display" id="zoneMemoDisplay">메모 없음</div>
+            <div class="zone-memo-edit" id="zoneMemoEditArea">
+                <textarea id="zoneMemoText" placeholder="이 구역에 대한 메모, 지시사항, 특이사항 등을 입력하세요...&#10;예) 조합장 연락처: 010-XXXX-XXXX&#10;    이번 달 우선 처리: 분양신청서 취합"></textarea>
+                <div class="zone-memo-actions">
+                    <button class="btn-memo-save" onclick="saveMemo()">💾 저장</button>
+                    <button class="btn-memo-cancel" onclick="cancelMemoEdit()">취소</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-card" style="animation-delay:0.1s">
+                <div class="sidebar-card-title">
+                    <span>🏗️ 사업구역 필터</span>
+                    <button class="btn-manage-zones" onclick="openZoneManageModal()">⚙ 구역 관리</button>
+                </div>
+                <div class="zone-list" id="zoneList"></div>
+            </div>
+            <div class="sidebar-card" style="animation-delay:0.2s">
+                <div class="sidebar-card-title"><span>📅 캘린더</span></div>
+                <div class="mini-cal-nav">
+                    <button id="miniPrev">‹</button>
+                    <span class="mini-cal-title" id="miniCalTitle"></span>
+                    <button id="miniNext">›</button>
+                </div>
+                <div class="mini-cal-grid" id="miniCalGrid"></div>
+            </div>
+            <div class="sidebar-card" style="animation-delay:0.3s">
+                <div class="sidebar-card-title"><span>🔔 임박 일정</span></div>
+                <div class="upcoming-list" id="upcomingList"></div>
+            </div>
+        </aside>
+
+        <div class="content-area">
+            <div class="content-card">
+                <div class="month-nav">
+                    <h2 id="mainMonthTitle"></h2>
+                    <div class="month-nav-controls">
+                        <div class="view-toggle">
+                            <button class="active" id="btnCalView" onclick="switchView('cal')">📅 월간</button>
+                            <button id="btnListView" onclick="switchView('list')">📋 목록</button>
+                        </div>
+                        <div class="month-nav-btns">
+                            <button onclick="changeMonth(-1)">‹ 이전</button>
+                            <button class="today-btn" onclick="goToday()">오늘</button>
+                            <button onclick="changeMonth(1)">다음 ›</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="calendarView">
+                    <div class="cal-header">
+                        <div class="cal-dow">일</div><div class="cal-dow">월</div><div class="cal-dow">화</div>
+                        <div class="cal-dow">수</div><div class="cal-dow">목</div><div class="cal-dow">금</div><div class="cal-dow">토</div>
+                    </div>
+                    <div class="cal-grid" id="calGrid"></div>
+                </div>
+                <div id="listView"><div id="listContent"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 일정 추가/수정 Modal -->
+<div class="modal-overlay" id="eventModal" onclick="closeModalOutside(event,'eventModal')">
+    <div class="modal-box">
+        <div class="modal-title" id="eventModalTitle">📝 일정 추가</div>
+        <input type="hidden" id="editId">
+        <div class="form-row"><label>일정명 *</label><input type="text" id="fName" placeholder="예: 조합총회, 관리처분계획 인가 신청..."></div>
+        <div class="form-grid2">
+            <div class="form-row"><label>날짜 *</label><input type="date" id="fDate"></div>
+            <div class="form-row"><label>종료일 (선택)</label><input type="date" id="fEndDate"></div>
+        </div>
+        <div class="form-grid2">
+            <div class="form-row"><label>사업구역 *</label><select id="fZone"><option value="">-- 선택 --</option></select></div>
+            <div class="form-row">
+                <label>일정 유형</label>
+                <select id="fType">
+                    <option value="회의">🏛️ 회의/총회</option>
+                    <option value="서류">📄 서류/신청</option>
+                    <option value="현장">🏗️ 현장업무</option>
+                    <option value="법정기한">⏰ 법정기한(입찰공고 등)</option>
+                    <option value="기타">📌 기타</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <label>색상</label>
+            <div class="color-picker" id="colorPicker">
+                <div class="color-chip selected" data-color="#00d2ff" style="background:#00d2ff"></div>
+                <div class="color-chip" data-color="#9d50bb" style="background:#9d50bb"></div>
+                <div class="color-chip" data-color="#2ed573" style="background:#2ed573"></div>
+                <div class="color-chip" data-color="#ffa502" style="background:#ffa502"></div>
+                <div class="color-chip" data-color="#ff4757" style="background:#ff4757"></div>
+                <div class="color-chip" data-color="#1abc9c" style="background:#1abc9c"></div>
+                <div class="color-chip" data-color="#eccc68" style="background:#eccc68"></div>
+                <div class="color-chip" data-color="#a29bfe" style="background:#a29bfe"></div>
+            </div>
+        </div>
+        <div class="form-row"><label>메모</label><textarea id="fNote" placeholder="담당자, 장소, 준비사항 등..."></textarea></div>
+        <div class="form-row" style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="fDone" style="width:18px;height:18px;cursor:pointer;margin:0;">
+            <label for="fDone" style="margin:0;cursor:pointer;font-size:0.9rem;color:var(--text-main);">완료된 일정으로 표시</label>
+        </div>
+        <div class="form-actions" style="display:flex; justify-content:space-between;">
+            <button class="btn-cancel" id="btnDeleteEvent" onclick="deleteCurrentEvent()" style="background:rgba(255,71,87,0.1);color:var(--accent-red);border:1px solid rgba(255,71,87,0.3);display:none;">🗑️ 삭제</button>
+            <div style="display:flex; gap:8px;">
+                <button class="btn-cancel" onclick="closeModal('eventModal')">취소</button>
+                <button class="btn-save" onclick="saveEvent()">저장하기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 일간 상세 모달 (Day View) -->
+<div class="modal-overlay" id="dayViewModal" onclick="closeModalOutside(event,'dayViewModal')">
+    <div class="modal-box" style="padding: 0; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="padding: 24px 24px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <div class="modal-title" id="dayViewModalTitle" style="margin-bottom: 0; font-size: 1.2rem;">📅 2026년 7월 22일</div>
+        </div>
+        <div id="dayViewList" style="padding: 16px 24px; overflow-y: auto; flex: 1;">
+            <!-- 일간 일정 리스트 -->
+        </div>
+        <div style="padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
+            <button class="btn-add-main" style="width: 100%; justify-content: center;" onclick="openEventModalFromDayView()">＋ 이 날짜에 새 일정 추가</button>
+            <button class="btn-cancel" style="width: 100%; margin-top: 8px;" onclick="closeModal('dayViewModal')">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 절차 세부 기록 모달 -->
+<div class="modal-overlay" id="procDetailModal" onclick="closeModalOutside(event,'procDetailModal')">
+    <div class="modal-box">
+        <div class="modal-title" id="procDetailModalTitle">📝 단계 상세 기록</div>
+        <input type="hidden" id="pdZoneId">
+        <input type="hidden" id="pdStepIdx">
+        <div class="form-row">
+            <label id="pdDateLabel">완료일 / 목표일</label>
+            <input type="date" id="pdDate">
+        </div>
+        <div class="form-row">
+            <label>메모 (변경인가, 조건부 등 특이사항)</label>
+            <textarea id="pdMemo" placeholder="내용을 입력하세요..." style="min-height:80px;"></textarea>
+        </div>
+        <div class="form-actions" style="display:flex; justify-content:space-between; align-items:center;">
+            <button class="btn-cancel" onclick="setAsCurrentStageFromDetail()" style="background:rgba(0,210,255,0.1);color:var(--accent-blue);border:1px solid rgba(0,210,255,0.3);padding:8px 12px;font-size:0.8rem;">📍 현재 진행 단계로 설정</button>
+            <div style="display:flex; gap:8px;">
+                <button class="btn-cancel" onclick="closeModal('procDetailModal')">닫기</button>
+                <button class="btn-save" onclick="saveProcDetail()">저장하기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 구역 관리 Modal -->
+<div class="modal-overlay" id="zoneManageModal" onclick="closeModalOutside(event,'zoneManageModal')">
+    <div class="modal-box">
+        <div class="modal-title">⚙️ 사업구역 관리</div>
+        <div class="zone-manage-list" id="zoneManageList"></div>
+        <button class="btn-add-zone" onclick="openZoneEditModal(null)">＋ 새 사업구역 추가</button>
+        <div class="form-actions" style="margin-top:20px;">
+            <button class="btn-cancel" onclick="closeModal('zoneManageModal')">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 구역 추가/수정 Modal -->
+<div class="modal-overlay" id="zoneEditModal" onclick="closeModalOutside(event,'zoneEditModal')">
+    <div class="modal-box">
+        <div class="modal-title" id="zoneEditModalTitle">🏗️ 사업구역 추가</div>
+        <input type="hidden" id="zeId">
+        <div class="form-row"><label>구역명 *</label><input type="text" id="zeName" placeholder="예: 가덕1구역, 동래재개발구역..."></div>
+        <div class="form-row">
+            <label>구역 색상</label>
+            <div class="color-picker" id="zoneColorPicker">
+                <div class="color-chip selected" data-color="#00d2ff" style="background:#00d2ff"></div>
+                <div class="color-chip" data-color="#9d50bb" style="background:#9d50bb"></div>
+                <div class="color-chip" data-color="#2ed573" style="background:#2ed573"></div>
+                <div class="color-chip" data-color="#ffa502" style="background:#ffa502"></div>
+                <div class="color-chip" data-color="#ff4757" style="background:#ff4757"></div>
+                <div class="color-chip" data-color="#1abc9c" style="background:#1abc9c"></div>
+                <div class="color-chip" data-color="#eccc68" style="background:#eccc68"></div>
+                <div class="color-chip" data-color="#a29bfe" style="background:#a29bfe"></div>
+                <div class="color-chip" data-color="#fd79a8" style="background:#fd79a8"></div>
+                <div class="color-chip" data-color="#e17055" style="background:#e17055"></div>
+            </div>
+        </div>
+        <div class="form-row">
+            <label>현재 추진 단계</label>
+            <select id="zeStage"><option value="-1">-- 미설정 --</option></select>
+        </div>
+        <div class="form-row">
+            <label>현재 단계 진입일</label>
+            <input type="date" id="zeStageDate">
+            <div style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;">해당 단계에 진입한 날짜를 입력하면 경과일이 자동 계산됩니다.</div>
+        </div>
+        <div class="form-actions">
+            <button class="btn-cancel" onclick="closeModal('zoneEditModal')">취소</button>
+            <button class="btn-save" onclick="saveZone()">저장</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  도시정비법 사업 추진 절차 (재개발·재건축) — 14단계
+// ═══════════════════════════════════════════════════
+const PROCEDURES = [
+    { id:'p0',  name:'기본계획\n수립',     short:'기본계획',   desc:'도시·주거환경정비 기본계획 수립' },
+    { id:'p1',  name:'정비구역\n지정',     short:'구역지정',   desc:'정비계획 수립 및 정비구역 지정' },
+    { id:'p2',  name:'추진위원회\n승인',   short:'추진위',     desc:'조합설립추진위원회 구성·승인' },
+    { id:'p3',  name:'조합설립\n인가',     short:'조합설립',   desc:'창립총회 후 조합설립인가 신청' },
+    { id:'p4',  name:'시공자\n선정',       short:'시공자선정', desc:'조합원 총회 의결을 통한 시공사 선정' },
+    { id:'p5',  name:'통합심의',           short:'통합심의',   desc:'건축심의·경관심의·교통영향평가 등 통합심의' }, // ← 신규 추가
+    { id:'p6',  name:'사업시행\n계획인가', short:'사업시행',   desc:'사업시행계획서 작성 및 인가 신청' },
+    { id:'p7',  name:'분양공고\n및 신청',  short:'분양신청',   desc:'분양공고 및 분양신청 기간 운영' },
+    { id:'p8',  name:'관리처분\n계획인가', short:'관리처분',   desc:'관리처분계획 수립 및 인가 신청' },
+    { id:'p9',  name:'이주 및\n철거',      short:'이주·철거',  desc:'기존 거주민 이주 및 건물 철거' },
+    { id:'p10', name:'착공',               short:'착공',       desc:'착공신고 및 공사 시작' },
+    { id:'p11', name:'준공인가',           short:'준공',       desc:'공사 완료 후 준공인가 신청' },
+    { id:'p12', name:'이전고시',           short:'이전고시',   desc:'소유권 이전 고시' },
+    { id:'p13', name:'청산',               short:'청산',       desc:'사업 완료 및 조합 청산' },
+];
+
+// Stage select 채우기
+const zeStageEl = document.getElementById('zeStage');
+PROCEDURES.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${i+1}단계: ${p.short}`;
+    zeStageEl.appendChild(opt);
+});
+
+// ═══════════════════════════════════════════════════
+//  데이터 & 상태
+// ═══════════════════════════════════════════════════
+const STORAGE_KEY = 'jmcnp_schedule_v4';
+const ZONES_KEY   = 'jmcnp_zones_v4';
+
+function getToday(offset = 0) {
+    const d = new Date(); d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10);
+}
+
+const DEFAULT_ZONES = [
+    { id:'all', name:'전체 보기',   color:'#00d2ff', stage:-1, stageDate:'', memo:'' },
+    { id:'z1',  name:'가덕1구역',   color:'#9d50bb', stage:2,  stageDate:getToday(-45),  memo:'' },
+    { id:'z2',  name:'사상2구역',   color:'#2ed573', stage:6,  stageDate:getToday(-120), memo:'' },
+    { id:'z3',  name:'동래3구역',   color:'#ffa502', stage:8,  stageDate:getToday(-30),  memo:'' },
+    { id:'z4',  name:'해운대4구역', color:'#ff4757', stage:1,  stageDate:getToday(-200), memo:'' },
+    { id:'z5',  name:'북구5구역',   color:'#1abc9c', stage:3,  stageDate:getToday(-60),  memo:'' },
+];
+
+const DEFAULT_EVENTS = [
+    { id:'e1', name:'조합설립 추진위원회 회의', date:getToday(3),   zone:'z1', type:'회의',    color:'#9d50bb', note:'구청 5층 대회의실', done:false },
+    { id:'e2', name:'관리처분계획 인가 신청',   date:getToday(7),   zone:'z2', type:'법정기한', color:'#ff4757', note:'구청 건축과 제출', done:false },
+    { id:'e3', name:'사업시행계획서 검토',       date:getToday(1),   zone:'z3', type:'서류',    color:'#ffa502', note:'이사 검토 후 수정', done:false },
+    { id:'e4', name:'현장 실측 및 촬영',         date:getToday(-2),  zone:'z4', type:'현장',    color:'#2ed573', note:'측량사무소 동행', done:true },
+    { id:'e5', name:'토지등소유자 총회',         date:getToday(14),  zone:'z1', type:'회의',    color:'#9d50bb', note:'장소: 동주민센터', done:false },
+    { id:'e6', name:'정비계획 변경 공람 기한',   date:getToday(5),   zone:'z5', type:'법정기한', color:'#a29bfe', note:'', done:false },
+    { id:'e7', name:'통합심의 사전 협의',        date:getToday(10),  zone:'z2', type:'서류',    color:'#2ed573', note:'건축 부서 협의', done:false },
+];
+
+let state = {
+    zones:        JSON.parse(localStorage.getItem(ZONES_KEY)   || 'null') || DEFAULT_ZONES,
+    events:       JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || DEFAULT_EVENTS,
+    currentYear:  new Date().getFullYear(),
+    currentMonth: new Date().getMonth(),
+    activeZone:   'all',
+    currentView:  'cal',
+    selectedEventColor: '#00d2ff',
+    selectedZoneColor:  '#00d2ff',
+    editingEventId: null,
+    editingZoneId:  null,
+    firebaseReady:  false,
+    dbRef:          null,
+    saveTimer:      null,
+    _ignoreNext:    false, // Firebase 로컬 변경 무한루프 방지
+};
+
+// ─── Save / Firebase Sync ─────────────────────────
+function setSyncStatus(status) {
+    const dot = document.getElementById('syncDot');
+    const txt = document.getElementById('syncText');
+    if (!dot || !txt) return;
+    dot.className = 'sync-dot ' + status;
+    if (status === 'synced') txt.textContent = '실시간 연결됨';
+    else if (status === 'saving') txt.textContent = '저장 중...';
+    else if (status === 'error') txt.textContent = '오프라인 (로컬)';
+    else if (status === 'local') txt.textContent = '로컬 전용 모드';
+    else if (status === 'connecting') txt.textContent = '연결 중...';
+}
+
+// ⚠️ FIREBASE 설정 — 아래 값을 교체하세요
+const FIREBASE_CONFIG = {
+    apiKey:            "AIzaSyAsQqFEmY4iyS255kmnRsqRLReaDtlWJJ0",
+    authDomain:        "jmcnp-schedule.firebaseapp.com",
+    databaseURL:       "https://jmcnp-schedule-default-rtdb.asia-southeast1.firebasedatabase.app", // ← 가장 중요!
+    projectId:         "jmcnp-schedule",
+    storageBucket:     "jmcnp-schedule.firebasestorage.app",
+    messagingSenderId: "1088833828943",
+    appId:             "1:1088833828943:web:5e2800501b2c1340b5523a"
+};
+
+function initFirebase() {
+    if (!FIREBASE_CONFIG.databaseURL || FIREBASE_CONFIG.databaseURL.includes('여기에_붙여넣기')) {
+        console.warn('Firebase 설정이 누락되었습니다. 로컬 전용 모드로 동작합니다.');
+        setSyncStatus('local');
+        return;
+    }
+    try {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        state.dbRef = firebase.database().ref('jmcnp_v4');
+        state.firebaseReady = true;
+
+        // 실시간 수신 리스너
+        state.dbRef.on('value', snapshot => {
+            const data = snapshot.val();
+            if (data && data.events && data.zones) {
+                if (state._ignoreNext) {
+                    state._ignoreNext = false;
+                    return; // 내가 방금 저장한 이벤트에 의한 갱신은 무시 (깜빡임 방지)
+                }
+                state.events = data.events;
+                state.zones  = data.zones;
+                
+                // 로컬스토리지에도 백업 
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state.events));
+                localStorage.setItem(ZONES_KEY,   JSON.stringify(state.zones));
+                
+                renderAll();
+                setSyncStatus('synced');
+            } else if (!data) {
+                // DB가 비어있는 최초 실행 상태인 경우: 
+                // PC에 있던 로컬 데이터를 DB로 업로드하여 초기 기준으로 삼습니다.
+                console.log('Firebase DB가 비어있어 초기 데이터를 업로드합니다.');
+                save();
+            }
+        });
+
+        // 접속 연결 상태 모니터링
+        firebase.database().ref('.info/connected').on('value', snap => {
+            if (snap.val() === true) {
+                setSyncStatus('synced');
+            } else {
+                setSyncStatus('connecting');
+            }
+        });
+    } catch (e) {
+        console.error('Firebase 초기화 실패:', e);
+        setSyncStatus('error');
+    }
+}
+
+let _saveDebounce = null;
+function save() {
+    // 로컬스토리지 항상 백업
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.events));
+    localStorage.setItem(ZONES_KEY,   JSON.stringify(state.zones));
+
+    if (!state.firebaseReady || !state.dbRef) return;
+
+    setSyncStatus('saving');
+    clearTimeout(_saveDebounce);
+    _saveDebounce = setTimeout(() => {
+        state._ignoreNext = true; // 내가 쓴 데이터 수신 시 재렌더 방지
+        state.dbRef.set({
+            events: state.events,
+            zones:  state.zones,
+            _meta:  { updatedAt: new Date().toISOString() }
+        })
+        .then(() => setSyncStatus('synced'))
+        .catch(err => { console.error(err); setSyncStatus('error'); });
+    }, 600);
+}
+
+// ─── Helpers ────────────────────────────────────────
+function pad(n) { return String(n).padStart(2,'0'); }
+function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function today() { return ymd(new Date()); }
+function daysUntil(ds) { return Math.ceil((new Date(ds) - new Date(today())) / 86400000); }
+function daysSince(ds)  { if (!ds) return null; return Math.floor((new Date(today()) - new Date(ds)) / 86400000) + 1; }
+function eventsForZone(zoneId) { return zoneId === 'all' ? state.events : state.events.filter(e => e.zone === zoneId); }
+function eventsForMonth(y, m)  {
+    const prefix = `${y}-${pad(m+1)}`;
+    return state.events.filter(e =>
+        e.date.startsWith(prefix) &&
+        (state.activeZone === 'all' || e.zone === state.activeZone)
+    );
+}
+function getZone(id) { return state.zones.find(z => z.id === id) || { name:id, color:'#888', stage:-1, stageDate:'', memo:'' }; }
+function getTypeEmoji(t) { return {'회의':'🏛️','서류':'📄','현장':'🏗️','법정기한':'⏰','기타':'📌'}[t]||'📌'; }
+
+// ─── Stats ──────────────────────────────────────────
+function renderStats() {
+    const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+    const monthEvts = eventsForMonth(y, m);
+    const todayStr = today();
+    const weekStr = ymd(new Date(Date.now() + 7*86400000));
+    
+    // 1. 이번달 전체 일정
+    document.getElementById('statTotal').textContent = monthEvts.length;
+    let htmlTotal = monthEvts.map(e => `<div>${getTypeEmoji(e.type)} <span style="font-weight:bold;color:${getZone(e.zone).color}">[${getZone(e.zone).name.replace(/구역$/,'')}]</span> ${e.name} <span style="color:var(--text-dim);font-size:0.75rem;">(${e.date.substr(5)})</span></div>`).join('');
+    document.getElementById('popTotal').innerHTML = htmlTotal || '<div style="color:var(--text-dim);text-align:center;">등록된 일정이 없습니다</div>';
+
+    // 2. 7일 이내 마감
+    const urgent = state.events.filter(e => !e.done && e.date >= todayStr && e.date <= weekStr)
+                               .sort((a,b) => a.date.localeCompare(b.date));
+    document.getElementById('statUrgent').textContent = urgent.length;
+    let htmlUrgent = urgent.map(e => `<div>${getTypeEmoji(e.type)} <span style="font-weight:bold;color:${getZone(e.zone).color}">[${getZone(e.zone).name.replace(/구역$/,'')}]</span> ${e.name} <span style="color:var(--accent-orange);font-size:0.75rem;">(${e.date.substr(5)})</span></div>`).join('');
+    document.getElementById('popUrgent').innerHTML = htmlUrgent || '<div style="color:var(--text-dim);text-align:center;">임박한 일정이 없습니다</div>';
+
+    // 3. 완료된 일정
+    const doneEvts = monthEvts.filter(e => e.done);
+    document.getElementById('statDone').textContent = doneEvts.length;
+    let htmlDone = doneEvts.map(e => `<div>✅ <span style="text-decoration:line-through;color:var(--text-dim);"><span style="font-weight:bold;color:${getZone(e.zone).color}">[${getZone(e.zone).name.replace(/구역$/,'')}]</span> ${e.name}</span></div>`).join('');
+    document.getElementById('popDone').innerHTML = htmlDone || '<div style="color:var(--text-dim);text-align:center;">완료된 일정이 없습니다</div>';
+
+    // 4. 관리 사업구역 수
+    const zoneIds = new Set(state.events.map(e => e.zone));
+    const activeZones = state.zones.filter(z => z.id !== 'all' && zoneIds.has(z.id));
+    document.getElementById('statZones').textContent = activeZones.length;
+    let htmlZones = activeZones.map(z => `<div>📍 ${z.name}</div>`).join('');
+    document.getElementById('popZones').innerHTML = htmlZones || '<div style="color:var(--text-dim);text-align:center;">관리 중인 구역이 없습니다</div>';
+}
+
+// ─── Export Dropdown ────────────────────────────────
+function toggleExportMenu() {
+    document.getElementById('exportMenu').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+    if (!document.getElementById('exportWrap').contains(e.target)) {
+        document.getElementById('exportMenu').classList.remove('open');
+    }
+});
+function updateExportLabel() {
+    const item = document.getElementById('exportZoneItem');
+    const label = document.getElementById('exportZoneLabel');
+    if (state.activeZone === 'all') {
+        item.classList.add('disabled');
+        label.textContent = '구역을 먼저 선택하세요';
+    } else {
+        item.classList.remove('disabled');
+        label.textContent = `${getZone(state.activeZone).name} 일정만 내보내기`;
+    }
+}
+function exportCurrentZone() {
+    if (state.activeZone === 'all') return;
+    exportExcel(state.activeZone);
+}
+
+// ═══════════════════════════════════════════════════
+//  Excel 내보내기 (SheetJS) — 3번 기능
+// ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  Excel 내보내기 (SheetJS) — 14열 스타일 달력 형태
+// ═══════════════════════════════════════════════════
+function buildCalendarSheet(events, zoneName, zoneMemo) {
+    const y = state.currentYear;
+    const m = state.currentMonth;
+    const firstDay = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m+1, 0).getDate();
+    
+    const evtMap = {};
+    events.forEach(e => { (evtMap[e.date] = evtMap[e.date]||[]).push(e); });
+
+    const aoa = [];
+    
+    // 1. 헤더 (1행, 2행)
+    const title = zoneName === '전체' ? `☐ JMCNP 전체 구역 일정표 (${y}년 ${m+1}월)` : `☐ ${zoneName} 일정표`;
+    aoa.push([title, '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    
+    const printDate = new Date();
+    const printDateStr = `[${printDate.getFullYear()}.${pad(printDate.getMonth()+1)}.${pad(printDate.getDate())}. 작성 기준]`;
+    aoa.push(['', '', '', '', '', '', '', '', '', '', '', '', '', printDateStr]);
+    
+    // 3. 요일 헤더 (3행)
+    aoa.push(['일', '', '월', '', '화', '', '수', '', '목', '', '금', '', '토', '']);
+    
+    // 4. 달력 본문
+    let currentDay = 1;
+    let i = 0;
+    
+    while (currentDay <= daysInMonth || (i % 7 !== 0)) {
+        if (i % 7 === 0) {
+            aoa.push(['','','','','','','','','','','','','','']); // 새로운 주 시작
+        }
+        
+        const rowIdx = aoa.length - 1; // 현재 주의 행 인덱스
+        const dow = i % 7;
+        const colDate = dow * 2;
+        const colEvent = dow * 2 + 1;
+        
+        if (i < firstDay || currentDay > daysInMonth) {
+            aoa[rowIdx][colDate] = '';
+            aoa[rowIdx][colEvent] = '';
+        } else {
+            const dateStr = `${y}-${pad(m+1)}-${pad(currentDay)}`;
+            aoa[rowIdx][colDate] = `${m+1}/${currentDay}`;
+            
+            const dayEvts = evtMap[dateStr] || [];
+            let eventTextArr = [];
+            dayEvts.forEach(e => {
+                let evtText = e.name;
+                if (zoneName === '전체') {
+                    const z = getZone(e.zone);
+                    const shortZone = z.name !== '전체' ? `[${z.name.replace(/구역$/, '')}] ` : '';
+                    evtText = shortZone + evtText;
+                }
+                if (e.done) evtText += ' (완료)';
+                eventTextArr.push(evtText);
+            });
+            aoa[rowIdx][colEvent] = eventTextArr.join('\n');
+            currentDay++;
+        }
+        i++;
+    }
+    
+    // 5. 하단 메모
+    aoa.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '']); // 여백
+    aoa.push(['[특이사항 및 메모]', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    aoa.push([zoneMemo || '없음', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    
+    // 머지 설정
+    const merges = [
+        { s: {r:0, c:0}, e: {r:0, c:13} }, // 타이틀
+        { s: {r:1, c:0}, e: {r:1, c:13} }  // 작성일시
+    ];
+    // 요일 머지
+    for (let c = 0; c < 14; c += 2) {
+        merges.push({ s: {r:2, c:c}, e: {r:2, c:c+1} });
+    }
+    // 하단 메모 머지
+    const len = aoa.length;
+    merges.push({ s: {r:len-2, c:0}, e: {r:len-2, c:13} });
+    merges.push({ s: {r:len-1, c:0}, e: {r:len-1, c:13} });
+    
+    ws['!merges'] = merges;
+    
+    // 넓이 설정
+    const cols = [];
+    for (let c = 0; c < 14; c++) {
+        cols.push(c % 2 === 0 ? { wch: 4.5 } : { wch: 19 }); // 날짜열은 좁게, 일정열은 넓게
+    }
+    ws['!cols'] = cols;
+    
+    // === 스타일 적용 ===
+    const borderAll = {
+        top: { style: 'thin', color: {rgb: '000000'} },
+        bottom: { style: 'thin', color: {rgb: '000000'} },
+        left: { style: 'thin', color: {rgb: '000000'} },
+        right: { style: 'thin', color: {rgb: '000000'} }
+    };
+    
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = 0; R <= range.e.r; ++R) {
+        for (let C = 0; C <= range.e.c; ++C) {
+            const addr = XLSX.utils.encode_cell({r:R, c:C});
+            if (!ws[addr]) ws[addr] = { t: 's', v: '' }; // 빈 셀 생성
+            
+            let s = {
+                font: { name: '맑은 고딕', sz: 9, color: {rgb:'000000'} },
+                alignment: { vertical: 'center', wrapText: true },
+                border: borderAll
+            };
+            
+            if (R === 0) {
+                s.font = { name: '맑은 고딕', sz: 16, bold: true };
+                s.alignment.horizontal = 'center';
+                s.fill = { fgColor: {rgb: 'EBF5D6'} }; // 연두색
+            } else if (R === 1) {
+                s.alignment.horizontal = 'right';
+                s.font.sz = 8;
+                // 작성일시 행은 상단 타이틀과 이어지므로 윗 테두리를 지우거나 유지
+            } else if (R === 2) {
+                s.font.bold = true;
+                s.font.sz = 10;
+                s.alignment.horizontal = 'center';
+                s.fill = { fgColor: {rgb: 'FCD5B4'} }; // 살구색
+                if (C === 0 || C === 1) s.font.color = {rgb: 'FF0000'}; // 일
+                else if (C === 12 || C === 13) s.font.color = {rgb: '0070C0'}; // 토
+            } else if (R >= 3 && R <= len - 4) {
+                // 달력 본문
+                s.alignment.vertical = 'top';
+                
+                if (C % 2 === 0) {
+                    // 날짜 열
+                    s.alignment.horizontal = 'center';
+                    s.font.bold = true;
+                    if (C === 0) { s.fill = { fgColor: {rgb: 'FFEEEE'} }; s.font.color = {rgb: 'FF0000'}; }
+                    else if (C === 12) { s.fill = { fgColor: {rgb: 'DDF0F5'} }; s.font.color = {rgb: '0070C0'}; }
+                } else {
+                    // 일정 열
+                    s.alignment.horizontal = 'left';
+                    s.font.sz = 8;
+                }
+            } else if (R >= len - 2) {
+                s.alignment.vertical = 'top';
+                s.alignment.horizontal = 'left';
+                if (R === len - 2) s.font.bold = true;
+            }
+            
+            ws[addr].s = s;
+        }
+    }
+    
+    return ws;
+}
+
+function exportExcel(target) {
+    if (typeof XLSX === 'undefined') {
+        alert('엑셀 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+        return;
+    }
+    const wb = XLSX.utils.book_new();
+
+    const evts = eventsForMonth(state.currentYear, state.currentMonth);
+
+    if (target === 'all') {
+        const ws = buildCalendarSheet(evts, '전체', '전체 구역 엑셀 달력입니다.');
+        XLSX.utils.book_append_sheet(wb, ws, '전체구역 일정표');
+        XLSX.writeFile(wb, `JMCNP_전체일정_${state.currentYear}년${state.currentMonth+1}월.xlsx`);
+    } else {
+        const zone = getZone(target);
+        const ws = buildCalendarSheet(evts, zone.name, zone.memo);
+        XLSX.utils.book_append_sheet(wb, ws, zone.name.substring(0,31));
+        XLSX.writeFile(wb, `JMCNP_${zone.name}_${state.currentYear}년${state.currentMonth+1}월.xlsx`);
+    }
+    document.getElementById('exportMenu').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════
+//  Zone Header Panel
+// ═══════════════════════════════════════════════════
+function renderZoneHeader() {
+    const panel = document.getElementById('zoneHeaderPanel');
+    if (state.activeZone === 'all') { panel.classList.remove('visible'); updateExportLabel(); return; }
+    panel.classList.add('visible');
+    updateExportLabel();
+
+    const zone = getZone(state.activeZone);
+    const stageIdx = zone.stage;
+    const stageDays = stageIdx >= 0 ? daysSince(zone.stageDate) : null;
+
+    document.getElementById('zoneHeaderName').textContent = zone.name;
+    document.getElementById('zoneHeaderName').style.color = zone.color;
+
+    const badge = document.getElementById('zoneHeaderStageBadge');
+    if (stageIdx >= 0 && PROCEDURES[stageIdx]) {
+        badge.style.cssText = `background:${zone.color}18;border:1px solid ${zone.color}44;color:${zone.color}`;
+        badge.innerHTML = `<span style="font-size:1.1rem">📍</span> 현재: ${stageIdx+1}단계 · ${PROCEDURES[stageIdx].short}`;
+    } else {
+        badge.style.cssText = 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-dim)';
+        badge.innerHTML = '단계 미설정';
+    }
+
+    const daysEl = document.getElementById('zoneHeaderDays');
+    if (stageIdx >= 0 && stageDays !== null) {
+        daysEl.style.borderColor = zone.color + '44';
+        daysEl.innerHTML = `<div class="days-num" style="color:${zone.color}">${stageDays}</div><div class="days-label">일째 진행 중</div><div class="stage-name" style="color:${zone.color}">${PROCEDURES[stageIdx].short}</div>`;
+    } else {
+        daysEl.style.borderColor = 'var(--glass-border)';
+        daysEl.innerHTML = `<div style="color:var(--text-dim);font-size:0.85rem;padding:8px 0;">단계 미설정</div><button onclick="openZoneEditModal('${zone.id}')" style="margin-top:8px;background:rgba(0,210,255,0.1);border:1px solid rgba(0,210,255,0.3);color:var(--accent-blue);padding:6px 14px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:0.78rem;font-weight:700;">단계 설정하기</button>`;
+    }
+
+    // Procedure Stepper
+    const stepper = document.getElementById('procedureStepper');
+    stepper.innerHTML = '';
+    if (stageIdx < 0) {
+        stepper.innerHTML = `<div class="no-stage-notice"><div>추진 단계가 설정되지 않았습니다.</div><button onclick="openZoneEditModal('${zone.id}')">⚙ 구역 편집에서 단계 설정하기</button></div>`;
+    } else {
+        PROCEDURES.forEach((p, i) => {
+            const stepEl = document.createElement('div');
+            let cls = 'proc-step ';
+            if (i < stageIdx) cls += 'past';
+            else if (i === stageIdx) cls += 'current';
+            else cls += 'future';
+            stepEl.className = cls;
+            
+            const detail = (zone.stepDetails && zone.stepDetails[i]) ? zone.stepDetails[i] : null;
+            const hasMemo = detail && detail.memo ? '📝' : '';
+            let dateStr = '';
+            if (detail && detail.date) {
+                if (i <= stageIdx) {
+                    dateStr = `<div class="proc-step-meta" style="color:${zone.color}">${detail.date}</div>`;
+                } else {
+                    const diff = daysUntil(detail.date);
+                    const label = diff === 0 ? 'D-Day' : (diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`);
+                    dateStr = `<div class="proc-step-meta" style="color:${zone.color};font-weight:700;">${label}</div>`;
+                }
+            }
+            const memoIcon = hasMemo ? `<div class="proc-step-meta" title="${detail.memo}">${hasMemo}</div>` : '';
+            
+            const ddayHtml = (i === stageIdx && stageDays !== null) ? `<div class="proc-step-dday">D+${stageDays}일</div>` : '';
+            stepEl.innerHTML = `<div class="proc-circle" title="${p.desc}"><span class="proc-num">${i+1}</span></div><div class="proc-step-name">${p.name.replace('\n','<br>')}</div>${dateStr}${memoIcon}${ddayHtml}`;
+            stepEl.onclick = () => openProcDetailModal(zone.id, i);
+            stepper.appendChild(stepEl);
+        });
+    }
+
+    // Memo Section — 2번 기능
+    renderMemoDisplay();
+}
+
+// ─── Zone Memo ──────────────────────────────────────
+function renderMemoDisplay() {
+    const zone = getZone(state.activeZone);
+    const display = document.getElementById('zoneMemoDisplay');
+    const editArea = document.getElementById('zoneMemoEditArea');
+    const btn = document.getElementById('btnMemoEdit');
+    editArea.style.display = 'none';
+    btn.textContent = '✏ 편집';
+    btn.classList.remove('active');
+    if (zone.memo && zone.memo.trim()) {
+        display.textContent = zone.memo;
+        display.className = 'zone-memo-display has-content';
+    } else {
+        display.textContent = '메모 없음 — 편집 버튼을 눌러 지시사항, 연락처 등을 입력하세요.';
+        display.className = 'zone-memo-display';
+    }
+    display.style.display = 'block'; // ← '' 대신 'block'으로 명시
+}
+
+function toggleMemoEdit() {
+    const editArea = document.getElementById('zoneMemoEditArea');
+    const display  = document.getElementById('zoneMemoDisplay');
+    const btn = document.getElementById('btnMemoEdit');
+    // 현재 편집 중인지 확인 (flex 또는 block이면 편집 중)
+    const isEditing = editArea.style.display === 'flex' || editArea.style.display === 'block';
+    if (isEditing) {
+        cancelMemoEdit();
+    } else {
+        const zone = getZone(state.activeZone);
+        document.getElementById('zoneMemoText').value = zone.memo || '';
+        editArea.style.display = 'flex';   // ← 버그 수정: ''→'flex'
+        editArea.style.flexDirection = 'column';
+        editArea.style.gap = '0';
+        display.style.display = 'none';
+        btn.textContent = '✕ 닫기';
+        btn.classList.add('active');
+        document.getElementById('zoneMemoText').focus();
+    }
+}
+
+function saveMemo() {
+    if (state.activeZone === 'all') return;
+    const idx = state.zones.findIndex(z => z.id === state.activeZone);
+    if (idx !== -1) {
+        state.zones[idx].memo = document.getElementById('zoneMemoText').value.trim();
+        save();
+    }
+    renderMemoDisplay();
+}
+
+function cancelMemoEdit() {
+    document.getElementById('zoneMemoEditArea').style.display = 'none';
+    document.getElementById('zoneMemoDisplay').style.display = 'block'; // ← 버그 수정
+    const btn = document.getElementById('btnMemoEdit');
+    btn.textContent = '✏ 편집';
+    btn.classList.remove('active');
+}
+
+// ─── Zone Sidebar List ───────────────────────────────
+function renderZoneList() {
+    const container = document.getElementById('zoneList');
+    container.innerHTML = '';
+    const zoneSelect = document.getElementById('fZone');
+    zoneSelect.innerHTML = '<option value="">-- 선택 --</option>';
+
+    state.zones.forEach(z => {
+        const count = z.id === 'all' ? state.events.length : state.events.filter(e => e.zone === z.id).length;
+        const btn = document.createElement('button');
+        btn.className = 'zone-btn' + (state.activeZone === z.id ? ' active' : '');
+        const stageLabel = (z.id !== 'all' && z.stage >= 0 && PROCEDURES[z.stage])
+            ? `<span style="font-size:0.65rem;color:${z.color};opacity:0.85;display:block;margin-top:1px;">${PROCEDURES[z.stage].short}</span>` : '';
+        btn.innerHTML = `<span class="zone-dot" style="background:${z.color}"></span><span style="flex:1">${z.name}${stageLabel}</span><span class="zone-count">${count}</span>`;
+        btn.onclick = () => { state.activeZone = z.id; renderAll(); };
+        container.appendChild(btn);
+        if (z.id !== 'all') {
+            const opt = document.createElement('option');
+            opt.value = z.id; opt.textContent = z.name;
+            zoneSelect.appendChild(opt);
+        }
+    });
+}
+
+// ─── Mini Calendar ───────────────────────────────────
+function renderMiniCal() {
+    const y = state.currentYear, m = state.currentMonth;
+    document.getElementById('miniCalTitle').textContent = `${y}년 ${m+1}월`;
+    const grid = document.getElementById('miniCalGrid');
+    grid.innerHTML = '';
+    ['일','월','화','수','목','금','토'].forEach((d,i) => {
+        const el = document.createElement('div'); el.className = 'mini-cal-dow'; el.textContent = d;
+        if(i===0) el.style.color='var(--accent-red)';
+        if(i===6) el.style.color='#7ec8e3';
+        grid.appendChild(el);
+    });
+    const todayStr = today();
+    const eventDates = new Set(eventsForMonth(y, m).map(e => e.date));
+    const firstDay = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m+1, 0).getDate();
+    const prevDays = new Date(y, m, 0).getDate();
+    for (let i = 0; i < firstDay; i++) {
+        const el = document.createElement('div'); el.className = 'mini-cal-day other-month';
+        el.textContent = prevDays - firstDay + 1 + i; grid.appendChild(el);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${y}-${pad(m+1)}-${pad(d)}`;
+        const el = document.createElement('div');
+        const dow = new Date(y, m, d).getDay();
+        let cls = 'mini-cal-day';
+        if (dateStr === todayStr) cls += ' today';
+        if (eventDates.has(dateStr)) cls += ' has-event';
+        if (dow === 0) cls += ' sunday';
+        if (dow === 6) cls += ' saturday';
+        el.className = cls; el.textContent = d;
+        el.onclick = () => { document.querySelectorAll('.mini-cal-day').forEach(x=>x.classList.remove('selected')); el.classList.add('selected'); };
+        grid.appendChild(el);
+    }
+    document.getElementById('miniPrev').onclick = () => changeMonth(-1);
+    document.getElementById('miniNext').onclick = () => changeMonth(1);
+}
+
+// ─── Upcoming ────────────────────────────────────────
+function renderUpcoming() {
+    const list = document.getElementById('upcomingList');
+    const todayStr = today();
+    const upcoming = state.events
+        .filter(e => !e.done && e.date >= todayStr && (state.activeZone === 'all' || e.zone === state.activeZone))
+        .sort((a,b) => a.date.localeCompare(b.date)).slice(0,5);
+    if (!upcoming.length) {
+        list.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem;text-align:center;padding:16px 0;">임박한 일정이 없습니다</div>';
+        return;
+    }
+    list.innerHTML = '';
+    upcoming.forEach(e => {
+        const d = daysUntil(e.date);
+        const dLabel = d===0?'Today':d===1?'D-1':`D-${d}`;
+        const bg  = d<=3?'rgba(255,71,87,0.15)':d<=7?'rgba(255,165,2,0.12)':'rgba(0,210,255,0.08)';
+        const col = d<=3?'var(--accent-red)':d<=7?'var(--accent-orange)':'var(--accent-blue)';
+        const zone = getZone(e.zone);
+        list.innerHTML += `<div class="upcoming-item" onclick="openEditEventModal('${e.id}')">
+            <div class="upcoming-dday" style="background:${bg};color:${col}"><span class="d">${dLabel}</span></div>
+            <div class="upcoming-info"><div class="title">${e.name}</div><div class="meta">${zone.name} · ${e.date}</div></div>
+        </div>`;
+    });
+}
+
+// ─── Calendar ────────────────────────────────────────
+function renderCalendar() {
+    const y = state.currentYear, m = state.currentMonth;
+    document.getElementById('mainMonthTitle').textContent = `${y}년 ${m+1}월`;
+    const grid = document.getElementById('calGrid'); grid.innerHTML = '';
+    const todayStr = today();
+    const firstDay = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m+1, 0).getDate();
+    const prevDays = new Date(y, m, 0).getDate();
+    const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+    const evts = eventsForMonth(y, m);
+    const evtMap = {};
+    evts.forEach(e => { (evtMap[e.date] = evtMap[e.date]||[]).push(e); });
+
+    for (let i = 0; i < totalCells; i++) {
+        let dayNum, dateStr, isOther = false;
+        if (i < firstDay) {
+            dayNum = prevDays - firstDay + 1 + i;
+            const pm=m===0?12:m, py=m===0?y-1:y;
+            dateStr=`${py}-${pad(pm)}-${pad(dayNum)}`; isOther=true;
+        } else if (i >= firstDay + daysInMonth) {
+            dayNum = i - firstDay - daysInMonth + 1;
+            const nm=m===11?1:m+2, ny=m===11?y+1:y;
+            dateStr=`${ny}-${pad(nm)}-${pad(dayNum)}`; isOther=true;
+        } else {
+            dayNum=i-firstDay+1; dateStr=`${y}-${pad(m+1)}-${pad(dayNum)}`;
+        }
+        const dow = i % 7;
+        const cell = document.createElement('div');
+        let cls='cal-cell';
+        if(isOther) cls+=' other-month-cell';
+        if(dateStr===todayStr) cls+=' today-cell';
+        if(dow===0) cls+=' sunday-cell';
+        if(dow===6) cls+=' saturday-cell';
+        cell.className=cls;
+        cell.onclick = ev => { 
+            if (window.innerWidth <= 768) {
+                openDayViewModal(dateStr);
+            } else if (ev.target === cell || ev.target.classList.contains('cal-day-num') || ev.target.classList.contains('cal-dots')) {
+                openEventModal(dateStr); 
+            }
+        };
+        const todayBadge=dateStr===todayStr?`<span class="today-badge">TODAY</span>`:'';
+        cell.innerHTML=`<div class="cal-day-num"><span class="day-num-text">${dayNum}</span>${todayBadge}</div>`;
+        const dayEvts=evtMap[dateStr]||[];
+
+        if (dayEvts.length > 0) {
+            const dotsContainer = document.createElement('div');
+            dotsContainer.className = 'cal-dots';
+            dayEvts.forEach(e => {
+                const dot = document.createElement('div');
+                dot.className = 'cal-dot';
+                dot.style.background = e.color;
+                dotsContainer.appendChild(dot);
+            });
+            cell.appendChild(dotsContainer);
+        }
+
+        dayEvts.slice(0,3).forEach(e=>{
+            const zone = getZone(e.zone);
+            const shortZone = zone.name !== '전체' ? `[${zone.name.replace(/구역$/, '')}] ` : '';
+            const displayColor = state.activeZone === 'all' ? zone.color : e.color;
+            const chip=document.createElement('span'); chip.className='cal-event';
+            chip.style.cssText=`background:${displayColor}22;color:${displayColor};border:1px solid ${displayColor}44;text-decoration:${e.done?'line-through':'none'}`;
+            chip.textContent=`${shortZone}${getTypeEmoji(e.type)} ${e.name}`; chip.title=`${zone.name} - ${e.name}`;
+            chip.onclick=ev=>{ev.stopPropagation();openEditEventModal(e.id);}; cell.appendChild(chip);
+        });
+        if(dayEvts.length>3){
+            const more=document.createElement('span');
+            more.className='cal-event-more';
+            more.style.cssText='font-size:0.68rem;color:var(--text-dim);padding:2px 6px;';
+            more.textContent=`+${dayEvts.length-3} 더보기`;
+            more.onclick=ev=>{ev.stopPropagation();openDayViewModal(dateStr);};
+            cell.appendChild(more);
+        }
+        grid.appendChild(cell);
+    }
+}
+
+// ─── List View ───────────────────────────────────────
+function renderList() {
+    const y=state.currentYear, m=state.currentMonth;
+    const evts=eventsForMonth(y,m).sort((a,b)=>a.date.localeCompare(b.date));
+    const content=document.getElementById('listContent');
+    if(!evts.length){content.innerHTML=`<div class="empty-state"><div class="icon">📭</div><p>이달 일정이 없습니다.<br>일정을 추가해보세요!</p></div>`;return;}
+    const groups={};evts.forEach(e=>{(groups[e.date]=groups[e.date]||[]).push(e);});
+    const wd=['일','월','화','수','목','금','토'];
+    content.innerHTML=Object.entries(groups).map(([date,dayEvts])=>{
+        const d=new Date(date),dow=wd[d.getDay()],dayNum=d.getDate();
+        const diff=daysUntil(date);
+        const dLabel=diff===0?'오늘':diff>0?`D-${diff}`:`D+${Math.abs(diff)}`;
+        const dColor=diff<0?'var(--text-dim)':diff<=3?'var(--accent-red)':diff<=7?'var(--accent-orange)':'var(--accent-blue)';
+        const rows=dayEvts.map(e=>{
+            const zone=getZone(e.zone);
+            const displayColor = state.activeZone === 'all' ? zone.color : e.color;
+            return `<div class="list-event-row" onclick="openEditEventModal('${e.id}')">
+                <div class="event-date-badge"><div class="day" style="color:${displayColor}">${dayNum}</div><div class="weekday">${dow}요일</div></div>
+                <div class="event-divider" style="background:${displayColor}"></div>
+                <div class="event-body">
+                    <div class="name" style="${e.done?'text-decoration:line-through;color:var(--text-dim)':''}">${getTypeEmoji(e.type)} ${e.name}</div>
+                    <div class="detail">${zone.name}${e.note?' · '+e.note:''}</div>
+                </div>
+                <div class="event-tags">
+                    <span class="event-tag" style="background:${displayColor}22;color:${displayColor};border:1px solid ${displayColor}44">${e.type}</span>
+                    ${e.done?'<span class="event-tag" style="background:rgba(46,213,115,0.1);color:var(--accent-green);border:1px solid rgba(46,213,115,0.3)">완료</span>':''}
+                </div>
+                <div class="event-actions" onclick="event.stopPropagation()">
+                    <button class="action-btn" title="완료 토글" onclick="toggleDone('${e.id}')">✓</button>
+                    <button class="action-btn delete" title="삭제" onclick="deleteEvent('${e.id}')">✕</button>
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="list-group"><div class="list-group-header"><span>${y}년 ${m+1}월 ${dayNum}일 (${dow})</span><span style="color:${dColor};margin-left:auto">${dLabel}</span></div>${rows}</div>`;
+    }).join('');
+}
+
+// ─── View / Navigation ───────────────────────────────
+function switchView(v){
+    state.currentView=v;
+    document.getElementById('calendarView').style.display=v==='cal'?'':'none';
+    document.getElementById('listView').style.display=v==='list'?'':'none';
+    document.getElementById('btnCalView').className=v==='cal'?'active':'';
+    document.getElementById('btnListView').className=v==='list'?'active':'';
+    renderAll();
+}
+function changeMonth(dir){
+    state.currentMonth+=dir;
+    if(state.currentMonth>11){state.currentMonth=0;state.currentYear++;}
+    if(state.currentMonth<0){state.currentMonth=11;state.currentYear--;}
+    renderAll();
+}
+function goToday(){state.currentYear=new Date().getFullYear();state.currentMonth=new Date().getMonth();renderAll();}
+
+// ─── Modal Helpers ───────────────────────────────────
+let isClosingFromHistory = false;
+function openModal(id){
+    document.getElementById(id).classList.add('open');
+    history.pushState({ modalId: id }, '');
+}
+function closeModal(id){
+    document.getElementById(id).classList.remove('open');
+    if(!isClosingFromHistory) history.back();
+}
+function closeModalOutside(e,id){if(e.target===document.getElementById(id))closeModal(id);}
+
+window.addEventListener('popstate', () => {
+    isClosingFromHistory = true;
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
+    if (openModals.length > 0) {
+        openModals[openModals.length - 1].classList.remove('open');
+    }
+    setTimeout(() => { isClosingFromHistory = false; }, 50);
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
+        if (openModals.length > 0) closeModal(openModals[openModals.length - 1].id);
+    }
+});
+
+let currentDayViewDate = '';
+function openDayViewModal(dateStr) {
+    currentDayViewDate = dateStr;
+    const [y, m, d] = dateStr.split('-');
+    document.getElementById('dayViewModalTitle').textContent = `📅 ${y}년 ${parseInt(m)}월 ${parseInt(d)}일`;
+    
+    const evts = (state.events || []).filter(e => e.date === dateStr && (state.activeZone === 'all' || e.zone === state.activeZone));
+    const list = document.getElementById('dayViewList');
+    
+    if (!evts.length) {
+        list.innerHTML = '<div class="empty-state" style="padding: 40px 20px;"><div class="icon">📭</div><p>이 날짜에 등록된 일정이 없습니다.</p></div>';
+    } else {
+        list.innerHTML = evts.map(e => {
+            const zone = getZone(e.zone);
+            const displayColor = state.activeZone === 'all' ? zone.color : e.color;
+            return `<div class="list-event-row" onclick="closeModal('dayViewModal'); openEditEventModal('${e.id}')" style="margin-bottom: 8px;">
+                <div class="event-divider" style="background:${displayColor}; width: 4px; height: auto; border-radius: 4px;"></div>
+                <div class="event-body" style="padding: 4px 0;">
+                    <div class="name" style="${e.done?'text-decoration:line-through;color:var(--text-dim)':''}">${getTypeEmoji(e.type)} ${e.name}</div>
+                    <div class="detail">${zone.name}${e.note?' · '+e.note:''}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    
+    openModal('dayViewModal');
+}
+function openEventModalFromDayView() {
+    closeModal('dayViewModal');
+    openEventModal(currentDayViewDate);
+}
+
+// ─── Event Modal ─────────────────────────────────────
+function openEventModal(prefillDate=''){
+    state.editingEventId=null;
+    document.getElementById('eventModalTitle').textContent='📝 일정 추가';
+    document.getElementById('editId').value='';
+    document.getElementById('fName').value='';
+    document.getElementById('fDate').value=prefillDate||today();
+    document.getElementById('fEndDate').value='';
+    document.getElementById('fZone').value=state.activeZone!=='all'?state.activeZone:'';
+    document.getElementById('fType').value='회의';
+    document.getElementById('fNote').value='';
+    document.getElementById('fDone').checked=false;
+    
+    if (state.activeZone !== 'all') {
+        const z = getZone(state.activeZone);
+        setEventColor(z.color || '#00d2ff');
+    } else {
+        setEventColor('#00d2ff');
+    }
+    
+    openModal('eventModal');
+}
+function openEditEventModal(id){
+    const e=state.events.find(x=>x.id===id);if(!e)return;
+    state.editingEventId=id;
+    document.getElementById('eventModalTitle').textContent='✏️ 일정 수정';
+    document.getElementById('editId').value=id;
+    document.getElementById('fName').value=e.name;
+    document.getElementById('fDate').value=e.date;
+    document.getElementById('fEndDate').value=e.endDate||'';
+    document.getElementById('fZone').value=e.zone;
+    document.getElementById('fType').value=e.type;
+    document.getElementById('fNote').value=e.note||'';
+    document.getElementById('fDone').checked=e.done;
+    setEventColor(e.color);
+    document.getElementById('btnDeleteEvent').style.display = 'block';
+    openModal('eventModal');
+}
+function setEventColor(c){state.selectedEventColor=c;document.querySelectorAll('#colorPicker .color-chip').forEach(ch=>ch.classList.toggle('selected',ch.dataset.color===c));}
+document.querySelectorAll('#colorPicker .color-chip').forEach(ch=>{ch.onclick=()=>setEventColor(ch.dataset.color);});
+
+document.getElementById('fZone').addEventListener('change', function() {
+    if (this.value) {
+        const zone = getZone(this.value);
+        if (zone && zone.color) setEventColor(zone.color);
+    }
+});
+
+function saveEvent(){
+    const name=document.getElementById('fName').value.trim();
+    const date=document.getElementById('fDate').value;
+    const zone=document.getElementById('fZone').value;
+    if(!name||!date||!zone){alert('일정명, 날짜, 사업구역은 필수입니다.');return;}
+    const evt={
+        id:state.editingEventId||'e'+Date.now(), name, date,
+        endDate:document.getElementById('fEndDate').value,
+        zone, type:document.getElementById('fType').value,
+        color:state.selectedEventColor,
+        note:document.getElementById('fNote').value.trim(),
+        done:document.getElementById('fDone').checked,
+    };
+    if(state.editingEventId){const idx=state.events.findIndex(e=>e.id===state.editingEventId);if(idx!==-1)state.events[idx]=evt;}
+    else state.events.push(evt);
+    save();closeModal('eventModal');renderAll();
+}
+function toggleDone(id){const e=state.events.find(x=>x.id===id);if(e){e.done=!e.done;save();renderAll();}}
+function deleteEvent(id){if(!confirm('이 일정을 삭제하시겠습니까?'))return;state.events=state.events.filter(e=>e.id!==id);save();renderAll();}
+function deleteCurrentEvent(){
+    if(state.editingEventId){
+        deleteEvent(state.editingEventId);
+        closeModal('eventModal');
+    }
+}
+
+// ─── Zone Manage Modal ───────────────────────────────
+function openZoneManageModal(){renderZoneManageList();openModal('zoneManageModal');}
+function renderZoneManageList(){
+    const container=document.getElementById('zoneManageList');
+    const editable=state.zones.filter(z=>z.id!=='all');
+    if(!editable.length){container.innerHTML='<div style="color:var(--text-dim);text-align:center;padding:20px;">등록된 사업구역이 없습니다.</div>';return;}
+    container.innerHTML=editable.map(z=>{
+        const sl=z.stage>=0&&PROCEDURES[z.stage]?` · ${PROCEDURES[z.stage].short}`:'';
+        return `<div class="zone-manage-row">
+            <div class="zone-manage-dot" style="background:${z.color}"></div>
+            <div class="zone-manage-name">${z.name}<span style="font-size:0.75rem;color:var(--text-dim)">${sl}</span></div>
+            <button class="zone-manage-btn" onclick="openZoneEditModal('${z.id}');closeModal('zoneManageModal')">✏ 수정</button>
+            <button class="zone-manage-btn del" onclick="deleteZone('${z.id}')">✕ 삭제</button>
+        </div>`;
+    }).join('');
+}
+
+// ─── Zone Edit Modal ─────────────────────────────────
+function openZoneEditModal(zoneId){
+    state.editingZoneId=zoneId;
+    if(zoneId){
+        const z=getZone(zoneId);
+        document.getElementById('zoneEditModalTitle').textContent='✏️ 사업구역 수정';
+        document.getElementById('zeId').value=zoneId;
+        document.getElementById('zeName').value=z.name;
+        document.getElementById('zeStage').value=z.stage>=0?z.stage:'-1';
+        document.getElementById('zeStageDate').value=z.stageDate||'';
+        setZoneColor(z.color);
+    } else {
+        document.getElementById('zoneEditModalTitle').textContent='🏗️ 새 사업구역 추가';
+        document.getElementById('zeId').value='';
+        document.getElementById('zeName').value='';
+        document.getElementById('zeStage').value='-1';
+        document.getElementById('zeStageDate').value='';
+        setZoneColor('#00d2ff');
+    }
+    openModal('zoneEditModal');
+}
+function setZoneColor(c){state.selectedZoneColor=c;document.querySelectorAll('#zoneColorPicker .color-chip').forEach(ch=>ch.classList.toggle('selected',ch.dataset.color===c));}
+document.querySelectorAll('#zoneColorPicker .color-chip').forEach(ch=>{ch.onclick=()=>setZoneColor(ch.dataset.color);});
+
+function saveZone(){
+    const name=document.getElementById('zeName').value.trim();
+    if(!name){alert('구역명을 입력해주세요.');return;}
+    const stageVal=parseInt(document.getElementById('zeStage').value);
+    const stageDate=document.getElementById('zeStageDate').value;
+    if(stageVal>=0&&!stageDate){alert('단계 진입일을 입력해주세요.');return;}
+    if(state.editingZoneId){
+        const idx=state.zones.findIndex(z=>z.id===state.editingZoneId);
+        if(idx!==-1){
+            state.zones[idx].name=name;
+            state.zones[idx].color=state.selectedZoneColor;
+            state.zones[idx].stage=stageVal;
+            state.zones[idx].stageDate=stageVal>=0?stageDate:'';
+            // memo는 유지
+        }
+    } else {
+        state.zones.push({id:'z'+Date.now(),name,color:state.selectedZoneColor,stage:stageVal,stageDate:stageVal>=0?stageDate:'',memo:''});
+    }
+    save();closeModal('zoneEditModal');renderAll();
+}
+
+function deleteZone(id){
+    const z=getZone(id);
+    if(!confirm(`"${z.name}" 구역을 삭제하시겠습니까?\n(해당 구역의 일정은 삭제되지 않습니다)`))return;
+    state.zones=state.zones.filter(z=>z.id!==id);
+    if(state.activeZone===id)state.activeZone='all';
+    save();renderZoneManageList();renderAll();
+}
+
+// ─── Procedure Detail Modal ────────────────────────────
+function openProcDetailModal(zoneId, stepIdx) {
+    const zone = getZone(zoneId);
+    if(!zone.stepDetails) zone.stepDetails = {};
+    const detail = zone.stepDetails[stepIdx] || { date:'', memo:'' };
+    
+    document.getElementById('pdZoneId').value = zoneId;
+    document.getElementById('pdStepIdx').value = stepIdx;
+    
+    const p = PROCEDURES[stepIdx];
+    document.getElementById('procDetailModalTitle').textContent = `📝 ${zone.name} - ${p.name.replace('\n', '')}`;
+    
+    // Label logic
+    const label = stepIdx <= zone.stage ? '완료일 (또는 변경인가일)' : '목표일 (예상일)';
+    document.getElementById('pdDateLabel').textContent = label;
+    
+    document.getElementById('pdDate').value = detail.date || '';
+    document.getElementById('pdMemo').value = detail.memo || '';
+    
+    openModal('procDetailModal');
+}
+
+function saveProcDetail() {
+    const zoneId = document.getElementById('pdZoneId').value;
+    const stepIdx = document.getElementById('pdStepIdx').value;
+    const date = document.getElementById('pdDate').value;
+    const memo = document.getElementById('pdMemo').value.trim();
+    
+    const zoneIdx = state.zones.findIndex(z => z.id === zoneId);
+    if(zoneIdx > -1) {
+        if(!state.zones[zoneIdx].stepDetails) state.zones[zoneIdx].stepDetails = {};
+        state.zones[zoneIdx].stepDetails[stepIdx] = { date, memo };
+        save();
+        renderZoneHeader();
+    }
+    closeModal('procDetailModal');
+}
+
+function deleteProcDetail() {
+    const zoneId = document.getElementById('pdZoneId').value;
+    const stepIdx = document.getElementById('pdStepIdx').value;
+    const zoneIdx = state.zones.findIndex(z => z.id === zoneId);
+    if(zoneIdx > -1 && state.zones[zoneIdx].stepDetails) {
+        if(confirm('이 단계의 기록을 삭제하시겠습니까?')) {
+            delete state.zones[zoneIdx].stepDetails[stepIdx];
+            save();
+            renderZoneHeader();
+            closeModal('procDetailModal');
+        }
+    }
+}
+
+function setAsCurrentStageFromDetail() {
+    const zoneId = document.getElementById('pdZoneId').value;
+    const stepIdx = parseInt(document.getElementById('pdStepIdx').value, 10);
+    const date = document.getElementById('pdDate').value || today();
+    
+    const zoneIdx = state.zones.findIndex(z => z.id === zoneId);
+    if(zoneIdx > -1) {
+        state.zones[zoneIdx].stage = stepIdx;
+        state.zones[zoneIdx].stageDate = date;
+        
+        if(!state.zones[zoneIdx].stepDetails) state.zones[zoneIdx].stepDetails = {};
+        state.zones[zoneIdx].stepDetails[stepIdx] = { date: document.getElementById('pdDate').value, memo: document.getElementById('pdMemo').value.trim() };
+        
+        save();
+        renderZoneHeader();
+    }
+    closeModal('procDetailModal');
+}
+
+// ─── Date Display ────────────────────────────────────
+function updateDateDisplay(){
+    const now=new Date();const wd=['일','월','화','수','목','금','토'][now.getDay()];
+    document.getElementById('currentDateDisplay').textContent=`${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 (${wd})`;
+}
+
+// ─── Render All ──────────────────────────────────────
+function renderAll(){
+    renderStats();renderZoneList();renderZoneHeader();renderMiniCal();renderUpcoming();
+    if(state.currentView==='cal')renderCalendar();else renderList();
+}
+
+// ═══════════════════════════════════════════════════
+//  인증 시스템
+// ═══════════════════════════════════════════════════
+const AUTH_KEY  = 'jmcnp_auth_v1';
+const PASSWORD  = 'jmcnp2025'; // ← 이 비밀번호를 변경하세요
+
+function checkAuth() {
+    if (localStorage.getItem(AUTH_KEY) === 'verified') {
+        document.getElementById('authOverlay').style.display = 'none';
+    } else {
+        document.getElementById('authOverlay').style.display = 'flex';
+        setTimeout(() => document.getElementById('authInput').focus(), 400);
+    }
+}
+
+function submitAuth() {
+    const input = document.getElementById('authInput').value;
+    const errorEl = document.getElementById('authError');
+    if (input === PASSWORD) {
+        localStorage.setItem(AUTH_KEY, 'verified');
+        errorEl.textContent = '';
+        const overlay = document.getElementById('authOverlay');
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.style.display = 'none'; }, 500);
+    } else {
+        errorEl.textContent = '비밀번호가 올바르지 않습니다.';
+        const inp = document.getElementById('authInput');
+        inp.classList.add('shake');
+        inp.value = '';
+        setTimeout(() => { inp.classList.remove('shake'); inp.focus(); }, 450);
+    }
+}
+
+// ═══════════════════════════════════════════════════
+//  데이터 내보내기 / 가져오기 (직원 간 공유)
+// ═══════════════════════════════════════════════════
+function exportData() {
+    const payload = {
+        version: 4,
+        exportedAt: new Date().toISOString(),
+        exportedBy: '공유 내보내기',
+        events: state.events,
+        zones: state.zones,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `JMCNP_데이터_${today()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.events || !data.zones) throw new Error('잘못된 파일 형식');
+            if (!confirm(`📥 데이터를 가져오면 현재 내용이 교체됩니다.\n\n내보낸 시간: ${data.exportedAt || '알 수 없음'}\n일정 수: ${data.events.length}건\n구역 수: ${data.zones.filter(z=>z.id!=='all').length}개\n\n계속하시겠습니까?`)) return;
+            state.events = data.events;
+            state.zones  = data.zones;
+            save();
+            renderAll();
+            alert('✅ 데이터를 성공적으로 가져왔습니다!');
+        } catch(err) {
+            alert('❌ 파일을 읽을 수 없습니다. JMCNP에서 내보낸 JSON 파일인지 확인해주세요.');
+        }
+        event.target.value = ''; // 같은 파일 재선택 가능하도록
+    };
+    reader.readAsText(file);
+}
+
+updateDateDisplay();
+setInterval(updateDateDisplay,60000);
+checkAuth();
+initFirebase();
+
+renderAll();
+</script>
+</body>
+</html>
