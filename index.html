@@ -1971,10 +1971,10 @@ function renderAll(){
 //  인증 시스템
 // ═══════════════════════════════════════════════════
 const AUTH_KEY  = 'jmcnp_auth_v1';
-const PASSWORD  = 'jmcnp2025'; // ← 이 비밀번호를 변경하세요
+const PASSWORD  = '20121010';
 
 function checkAuth() {
-    if (localStorage.getItem(AUTH_KEY) === 'verified') {
+    if (sessionStorage.getItem(AUTH_KEY) === 'verified') {
         document.getElementById('authOverlay').style.display = 'none';
     } else {
         document.getElementById('authOverlay').style.display = 'flex';
@@ -1986,7 +1986,7 @@ function submitAuth() {
     const input = document.getElementById('authInput').value;
     const errorEl = document.getElementById('authError');
     if (input === PASSWORD) {
-        localStorage.setItem(AUTH_KEY, 'verified');
+        sessionStorage.setItem(AUTH_KEY, 'verified');
         errorEl.textContent = '';
         const overlay = document.getElementById('authOverlay');
         overlay.style.opacity = '0';
