@@ -1366,8 +1366,11 @@ function renderZoneList() {
     const zoneSelect = document.getElementById('fZone');
     zoneSelect.innerHTML = '<option value="">-- 선택 --</option>';
 
+    const todayStr = today();
     state.zones.forEach(z => {
-        const count = z.id === 'all' ? state.events.length : state.events.filter(e => e.zone === z.id).length;
+        const count = z.id === 'all' 
+            ? state.events.filter(e => (e.endDate || e.date) >= todayStr).length 
+            : state.events.filter(e => e.zone === z.id && (e.endDate || e.date) >= todayStr).length;
         const btn = document.createElement('button');
         btn.className = 'zone-btn' + (state.activeZone === z.id ? ' active' : '');
         const stageLabel = (z.id !== 'all' && z.stage >= 0 && PROCEDURES[z.stage])
@@ -1460,7 +1463,6 @@ function renderUpcoming() {
 // ─── Calendar ────────────────────────────────────────
 function renderCalendar() {
     const y = state.currentYear, m = state.currentMonth;
-    document.getElementById('mainMonthTitle').textContent = `${y}년 ${m+1}월`;
     const grid = document.getElementById('calGrid'); grid.innerHTML = '';
     const todayStr = today();
     const firstDay = new Date(y, m, 1).getDay();
@@ -1946,6 +1948,8 @@ function renderAllDoneEvents() {
 }
 
 function renderAll(){
+    const y = state.currentYear, m = state.currentMonth;
+    document.getElementById('mainMonthTitle').textContent = `${y}년 ${m+1}월`;
     renderStats();renderZoneList();renderZoneHeader();renderMiniCal();renderUpcoming();
     if(state.currentView==='cal')renderCalendar();else renderList();
     renderAllDoneEvents();
