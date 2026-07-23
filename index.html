@@ -595,7 +595,10 @@
         <div class="content-area">
             <div class="content-card">
                 <div class="month-nav">
-                    <h2 id="mainMonthTitle"></h2>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <h2 id="mainMonthTitle" style="margin:0;"></h2>
+                        <input type="month" id="monthPicker" onchange="jumpToMonth(this.value)" style="padding:4px 8px; border:1px solid var(--glass-border); border-radius:8px; background:var(--bg-card); color:var(--text-main); font-family:inherit; font-size:1rem; cursor:pointer;" title="원하는 연/월로 이동">
+                    </div>
                     <div class="month-nav-controls">
                         <div class="view-toggle">
                             <button class="active" id="btnCalView" onclick="switchView('cal')">📅 월간</button>
@@ -1606,6 +1609,13 @@ function changeMonth(dir){
     renderAll();
 }
 function goToday(){state.currentYear=new Date().getFullYear();state.currentMonth=new Date().getMonth();renderAll();}
+function jumpToMonth(val) {
+    if(!val) return;
+    const [y, m] = val.split('-');
+    state.currentYear = parseInt(y, 10);
+    state.currentMonth = parseInt(m, 10) - 1;
+    renderAll();
+}
 
 // ─── Modal Helpers ───────────────────────────────────
 let isClosingFromHistory = false;
@@ -1950,6 +1960,7 @@ function renderAllDoneEvents() {
 function renderAll(){
     const y = state.currentYear, m = state.currentMonth;
     document.getElementById('mainMonthTitle').textContent = `${y}년 ${m+1}월`;
+    document.getElementById('monthPicker').value = `${y}-${pad(m+1)}`;
     renderStats();renderZoneList();renderZoneHeader();renderMiniCal();renderUpcoming();
     if(state.currentView==='cal')renderCalendar();else renderList();
     renderAllDoneEvents();
