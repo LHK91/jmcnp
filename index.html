@@ -595,9 +595,10 @@
         <div class="content-area">
             <div class="content-card">
                 <div class="month-nav">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <h2 id="mainMonthTitle" style="margin:0;"></h2>
-                        <input type="month" id="monthPicker" onchange="jumpToMonth(this.value)" style="padding:4px 8px; border:1px solid var(--glass-border); border-radius:8px; background:var(--bg-card); color:var(--text-main); font-family:inherit; font-size:1rem; cursor:pointer;" title="원하는 연/월로 이동">
+                    <div style="position:relative; display:inline-block; cursor:pointer; display:flex; align-items:center; gap:8px; width:fit-content;" title="클릭하여 연/월 이동">
+                        <h2 id="mainMonthTitle" style="margin:0; pointer-events:none; border-bottom: 2px dashed var(--accent-blue); padding-bottom: 2px;"></h2>
+                        <span style="font-size:0.8rem; color:var(--accent-blue); pointer-events:none;">▼</span>
+                        <input type="month" id="monthPicker" onchange="jumpToMonth(this.value)" onclick="try{this.showPicker()}catch(e){}" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">
                     </div>
                     <div class="month-nav-controls">
                         <div class="view-toggle">
